@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import {bridgeRequest} from './bridge_request.mjs';
 import {settleBeforeSnapshot} from './live_operation_completion.mjs';
 import {reportIntervalRequest,reportIntervalResponse,reportIntervalPair} from './reporting_interval_wire.mjs';
-import {recoverReportingInterval} from './recovery_session.mjs';
+import {recoverReportingInterval,recoverBridgeLogLevel} from './recovery_session.mjs';
 import {selectVerificationExposes, selectReadExposes} from './verification_selection.mjs';
 import {MqttStateEvidence} from './mqtt_state_evidence.mjs';
 const stateEvidence = new MqttStateEvidence();
@@ -77,7 +77,7 @@ function collectDiscovery(topic, value) {
         seen.discovery ??= {}; seen.discovery[topic] = value;
     }
 }
-let started=false, activeOperation=null, operationSettled=false, recoveryJournal=null;
+let started=false, activeOperation=null, operationSettled=false, recoveryJournal=null, bridgeLogJournal=null;
 function trackOperation(operation) {
     operationSettled=false;
     activeOperation=operation.finally(()=>{operationSettled=true;});
@@ -140,6 +140,31 @@ events.on('message',(topic,value,retained)=>{
                 .catch(error=>{seen.rediscoverError=error.message;process.exitCode=1;console.error('REDISCOVER_FAILED',error.message);}));
         }
         seen.device=d;
+        if((mode==='read-bridge-log-level'||mode==='set-bridge-log-level') && !started) {
+            started=true;
+            const permitted=['debug','info','warn','error'];
+            if(!permitted.includes(seen.logLevel)) {
+                seen.operationError='Missing current bridge log level';
+                process.exitCode=1;socket.end();
+            } else if(mode==='read-bridge-log-level') {
+                seen.bridgeLogLevel={value:seen.logLevel};
+                seen.completed=true;socket.end();
+            } else {
+                const desired=process.argv[3], expected=process.argv[4];
+                if(!permitted.includes(desired)||!permitted.includes(expected)||seen.logLevel!==expected) {
+                    seen.operationError='Foreign or invalid bridge log level';
+                    process.exitCode=1;socket.end();
+                } else {
+                    trackOperation(bridgeRequest(events,publish,base,'options',
+                        {options:{advanced:{log_level:desired}}}).then(()=>{
+                        seen.bridgeLogLevel={value:desired,expected};
+                        seen.completed=true;
+                    }).catch(error=>{
+                        seen.operationError=error.message;process.exitCode=1;
+                    }).finally(()=>socket.end()));
+                }
+            }
+        }
         if(mode==='read-interval-wire' && !started) {
             started=true;
             trackOperation(readIntervalWire(process.argv[3]).then(value=>{
@@ -195,6 +220,12 @@ socket.on('close',()=>{
             catch(error) {seen.recovery={status:'failed',error:error.message};}
         }
     }
+    if(bridgeLogJournal && (bridgeLogJournal.uncertain ||
+        bridgeLogJournal.confirmed!==bridgeLogJournal.baseline)) {
+        try {seen.bridgeLogRecovery=await recoverBridgeLogLevel(bridgeLogJournal,seen.device);}
+        catch(error) {seen.bridgeLogRecovery={status:'failed',error:error.message};}
+        if(!['already_restored','restored'].includes(seen.bridgeLogRecovery?.status)) process.exitCode=1;
+    }
     if(mode==='set' && seen.command?.readable) {
         seen.command.actual=seen.state?.[seen.command.property];
         seen.command.evidence=stateEvidence.matchAfter(seen.command.readSequence,seen.command.property,seen.command.value);
@@ -207,7 +238,7 @@ socket.on('close',()=>{
         if(seen.converterHashes.local!==seen.converterHashes.live)process.exitCode=1;
         console.log('CONVERTER_HASHES',JSON.stringify(seen.converterHashes));
     }
-    if(seen.operationError)process.exitCode=1;if(mode==='configure'&&!seen.configure)process.exitCode=1;if(mode==='rediscover'&&!seen.completed)process.exitCode=1;if(!seen.device || (mode==='interview'&&!seen.interview) || ([...longVerificationModes,'read','read-ranges','read-zone'].includes(mode)&&!seen.completed))process.exitCode=1;fs.writeFileSync('test/build/zigbee-live-'+mode+(resultId?'-'+resultId:mode==='set'?'-'+Date.now():'')+'.json',JSON.stringify(seen,null,2));console.log('DISCOVERY_COUNT',Object.keys(seen.discovery??{}).length);
+    if(seen.operationError)process.exitCode=1;if(mode==='configure'&&!seen.configure)process.exitCode=1;if(mode==='rediscover'&&!seen.completed)process.exitCode=1;if(!seen.device || (mode==='interview'&&!seen.interview) || (['read-bridge-log-level','set-bridge-log-level',...longVerificationModes,'read','read-ranges','read-zone'].includes(mode)&&!seen.completed))process.exitCode=1;fs.writeFileSync('test/build/zigbee-live-'+mode+(resultId?'-'+resultId:mode==='set'?'-'+Date.now():'')+'.json',JSON.stringify(seen,null,2));console.log('DISCOVERY_COUNT',Object.keys(seen.discovery??{}).length);
     }).catch(error=>{console.error('SNAPSHOT_FAILED',error.message);process.exitCode=1;});
 });
 setTimeout(()=>{if(!socket.destroyed)socket.destroy();},longVerificationModes.includes(mode)?905000:['configure','interview','read','read-ranges','read-zone'].includes(mode)?95000:20000).unref();
@@ -216,6 +247,21 @@ const pause=ms=>delay(ms,undefined,{signal:transportAbort.signal});
 async function readIntervalWire(control) {
     const reply=await bridgeRequest(events,publish,base,'action',reportIntervalRequest(seen.device,control),30000);
     return reportIntervalResponse(reply.data,seen.device,control);
+}
+function beginBridgeLogJournal(baseline) {
+    if(!['debug','info','warn','error'].includes(baseline)) throw Error('Missing bridge log baseline');
+    if(bridgeLogJournal) throw Error('Bridge log mutation already owned');
+    bridgeLogJournal={baseline,confirmed:baseline,uncertain:false};
+}
+async function applyBridgeLogLevel(level) {
+    if(!bridgeLogJournal || !['debug','info','warn','error'].includes(level))
+        throw Error('Invalid bridge log mutation');
+    if(bridgeLogJournal.confirmed===level && !bridgeLogJournal.uncertain) return;
+    if(socket.destroyed || !socket.writable) throw Error('Bridge connection closed before log restoration');
+    bridgeLogJournal.uncertain=true;
+    await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:level}}});
+    bridgeLogJournal.confirmed=level;
+    bridgeLogJournal.uncertain=false;
 }
 async function runFanSourceChecks() {
     const read=async attributes=>{
@@ -230,9 +276,9 @@ async function runFanSourceChecks() {
         const observationMs=fanSourceObservationDuration(process.env.RACOOL_FAN_SOURCE_OBSERVATION_MS);
         const originalLevel=seen.logLevel;
         const originalErrors=seen.errors?.length??0;
-        if(!['debug','info','warn','error'].includes(originalLevel)) throw Error('Missing original bridge log level');
+        beginBridgeLogJournal(originalLevel);
         try {
-            await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:'debug'}}});
+            await applyBridgeLogLevel('debug');
             const cursor=await captureLogCursor(configurationPath);
             await read([0x8058]);const start=seen.fanSourceReads.at(-1).reply.transaction;
             await pause(observationMs);
@@ -245,7 +291,7 @@ async function runFanSourceChecks() {
                 throw Error('Missing unsolicited fan decision temperature/difference reports');
             console.log('FAN_SOURCE_TRAFFIC',JSON.stringify({durationMs:observationMs,reports:reports.length,attributes:measured}));
         } finally {
-            await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:originalLevel}}});
+            await applyBridgeLogLevel(originalLevel);
         }
         if((seen.errors?.length??0)!==originalErrors) throw Error('Bridge error during fan source observation/restoration');
         seen.completed=true;
@@ -309,7 +355,7 @@ async function runFanChecks() {
     seen.fanBaseline = Object.fromEntries([...originals].map(([e, v]) => [e.property, v]));
     fs.writeFileSync('test/build/fan-before-live-tests.json', JSON.stringify(seen.fanBaseline, null, 2));
     const originalLevel = seen.logLevel, initialErrors = seen.errors?.length ?? 0;
-    if (typeof originalLevel !== 'string') throw Error('Missing bridge log baseline');
+    beginBridgeLogJournal(originalLevel);
     const reporting = () => bridgeRequest(events,publish,base,'device/reporting/read',
         {id:seen.device.ieee_address,endpoint:1,cluster:'genOnOff',configs:[{attribute:'onOff'}]});
     const readWire = async expected => {
@@ -325,7 +371,7 @@ async function runFanChecks() {
         return reply;
     };
     try {
-        await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:'debug'}}});
+        await applyBridgeLogLevel('debug');
         await setAndRead(interval, 0);
         await setAndRead(modeControl, 'Sürekli Açık');
         seen.fanEdges = [];
@@ -349,7 +395,7 @@ async function runFanChecks() {
         const failures = [];
         for (const control of [modeControl, interval]) try {await setAndRead(control, originals.get(control));}
         catch (error) {failures.push(error.message);}
-        try {await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:originalLevel}}});}
+        try {await applyBridgeLogLevel(originalLevel);}
         catch (error) {failures.push(error.message);}
         seen.fanRestorationErrors = failures;
         if (failures.length) throw Error('Fan restoration failed: '+failures.join('; '));
@@ -464,7 +510,7 @@ async function runChecks() {
     const observeTraffic = process.env.RACOOL_REPORT_TRAFFIC === '1';
     const originalLogLevel = seen.logLevel;
     if (observeTraffic) seen.reportingOriginalLogLevel = originalLogLevel;
-    if (observeTraffic && typeof originalLogLevel !== 'string') throw Error('Missing initial bridge log level');
+    if (observeTraffic) beginBridgeLogJournal(originalLogLevel);
     const original=Object.fromEntries(seen.initialReads.map(read=>[read.property,read.value]));
     if(controls.length===1 && controls[0].name.startsWith('report_interval_') && !observeTraffic && !observeChanges &&
         process.env.RACOOL_REPORT_RECONFIGURE!=='1') {
@@ -477,7 +523,7 @@ async function runChecks() {
     fs.writeFileSync('test/build/zigbee-before-tests.json',JSON.stringify(original,null,2));
     const ping=setInterval(()=>socket.write(Buffer.from([0xc0,0])),20000);
     try {
-        if (observeTraffic) await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:'debug'}}});
+        if (observeTraffic) await applyBridgeLogLevel('debug');
         for(const exp of controls) {
             if(!(exp.access&2)||exp.name==='system_command'||!['enum','numeric'].includes(exp.type))continue;
             const value=original[exp.property];
@@ -588,7 +634,7 @@ async function runChecks() {
         if ((seen.errors?.length ?? 0) !== initialErrors) throw Error('Bridge reported errors during verification');
     } finally {
         clearInterval(ping);
-        if (observeTraffic) await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:originalLogLevel}}});
+        if (observeTraffic) await applyBridgeLogLevel(originalLogLevel);
     }
     seen.completed=true;
 }
