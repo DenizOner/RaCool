@@ -42,7 +42,7 @@
 
 static const char *TAG = "Zigbee";
 /* ConfigurationManager owns report intervals. Rebuild only the SDK's derived
- * reporting cache before endpoint registration. SDK 2.0.4 restores reporting
+ * reporting cache before endpoint registration. The SDK may restore reporting
  * entries while rewriting their dataset; stale duplicate schedulers otherwise
  * survive updates to the first matching handle. Network datasets are untouched. */
 static esp_err_t ResetDerivedReportingCache(void) {
