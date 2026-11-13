@@ -33,6 +33,8 @@ Zigbee startup has a bounded 20-second admission window for SDK descriptor/repor
 
 Existing workers own peripheral/control mutations. Producers enqueue copied requests; admission is distinct from completion/readback. Cooperative Stop preserves ownership on timeout, rejects new work while closing and releases resources only after callbacks/operations drain. Console module registration propagates esp_err_t; successful partial entries remain console-owned and registration is not atomic rollback.
 
+DiagnosticsManager postpones an automatic periodic scan for at most 30 seconds when Zigbee is temporarily unhealthy (for example during a service restart or network rejoin). A recovered service is checked in the next poll; if it stays unhealthy, the complete scan records the actual failure after the bounded grace. Explicit self-tests bypass this delay, and initial startup uses its separate readiness timeout. The grace is not a recovery mechanism and does not resolve Zigbee SDK restart faults.
+
 ## Configuration and reset
 
 ConfigurationManager validates field/block snapshots and persists checked updates through UpdateFields. UpdateFieldsIfUnchanged compares expected field bytes under the same owner lock before validation/persistence; stale edits fail without partial mutation. Field allowlists and shared bounds apply to CLI, OLED, Zigbee and load paths; cross-field failures do not partially apply. GetDefaults constructs an owner default snapshot without mutating live/NVS state; config.diff compares defined fields rather than reserved bytes.
