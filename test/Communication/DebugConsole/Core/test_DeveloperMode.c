@@ -39,6 +39,6 @@ void test_DeveloperModeRejectsAmbiguousOrOversizedCommandTokens(void) {
     TEST_ASSERT_FALSE(DeveloperMode_IsUserLine(NULL));
     TEST_ASSERT_FALSE(DeveloperMode_IsUserLine("  "));
     TEST_ASSERT_FALSE(DeveloperMode_IsUserLine("\"SYSTEM\" TASKS"));
-    TEST_ASSERT_FALSE(DeveloperMode_IsUserLine("SYSTEM \\\u0054ASKS"));
+    TEST_ASSERT_FALSE(DeveloperMode_IsUserLine("SYSTEM \\\\u0054ASKS"));
     TEST_ASSERT_FALSE(DeveloperMode_IsUserLine("SYSTEM 12345678901234567890123456789012"));
 }
