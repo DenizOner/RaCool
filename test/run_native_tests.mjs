@@ -38,7 +38,7 @@ const includes = ['include','src','test','test/Infrastructure/mocks','test/Infra
 const flags = includes.flatMap(p=>['-I',resolve(p)]).concat([
     '-I',versionOutput,
     '-include',resolve('test/Infrastructure/support/test_mocks.h'),'-DRACOOL_TEST_NATIVE','-D_GNU_SOURCE',
-    '-DCORE_DEBUG_LEVEL=5','-DUNITY_OUTPUT_FORMAT=UNITY_FORMAT_LEGACY','-g',...(process.platform==='win32'?['-mconsole']:[]),'-lm']);
+    '-DCORE_DEBUG_LEVEL=5','-DUNITY_OUTPUT_FORMAT=UNITY_FORMAT_LEGACY','-g','-Wno-format-security',...(process.platform==='win32'?['-mconsole']:[]),'-lm']);
 const results = [];
 for (const suite of selected) {
     console.log('[BUILD] ' + suite.name);
