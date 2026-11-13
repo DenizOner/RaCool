@@ -164,6 +164,7 @@ events.on('message',(topic,value,retained)=>{
                     }).finally(()=>socket.end()));
                 }
             }
+            return; // Recovery child modes need no device-state subscription.
         }
         if(mode==='read-interval-wire' && !started) {
             started=true;
