@@ -88,3 +88,91 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
         await fs.rm(directory,{recursive:true,force:true});
     }
 });
+
+
+for (const scenario of ['confirmed','foreign','uncertain']) test(
+    'bridge logging recovery after '+scenario+' MQTT disconnect', async()=>{
+    const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-log-recovery-'));
+    const control='report_interval_radiator_s',property=control+'_climate';
+    const device={friendly_name:'fixture',ieee_address:'0x0000000000000123',
+        network_address:123,model_id:'RaCool-ESP32C6',definition:{exposes:[{
+            name:control,property,type:'numeric',access:7,value_min:0,value_max:600,value_step:1}]}};
+    let level='info',value=3,first=true;
+    const writes=[],clients=new Set();
+    const server=net.createServer(socket=>{
+        const initial=first;first=false;clients.add(socket);
+        socket.on('close',()=>clients.delete(socket));
+        socket.on('error',e=>{if(e.code!=='ECONNRESET') throw e;});
+        let buffer=Buffer.alloc(0);
+        socket.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>1){
+            let off=1,len=0,mul=1,b;
+            do{if(off>=buffer.length)return;b=buffer[off++];len+=(b&127)*mul;mul*=128;}while(b&128);
+            if(buffer.length<off+len)return;
+            const type=buffer[0]>>4,body=buffer.subarray(off,off+len);buffer=buffer.subarray(off+len);
+            if(type===1)socket.write(Buffer.from([0x20,2,0,0]));
+            if(type===8){
+                const n=body.readUInt16BE(2),topic=body.subarray(4,4+n).toString();
+                if(topic==='zigbee2mqtt/bridge/info')
+                    publish(socket,topic,{config:{advanced:{log_level:level}}});
+                if(topic==='zigbee2mqtt/bridge/devices'){
+                    publish(socket,topic,[device]);
+                    publish(socket,'zigbee2mqtt/fixture',{[property]:value});
+                }
+            }
+            if(type===3){
+                const n=body.readUInt16BE(),topic=body.subarray(2,2+n).toString();
+                const payload=JSON.parse(body.subarray(2+n).toString());
+                if(topic.endsWith('/get'))publish(socket,'zigbee2mqtt/fixture',{[property]:value});
+                if(topic.endsWith('/set'))value=payload[property];
+                if(topic==='zigbee2mqtt/bridge/request/options'){
+                    const desired=payload.options?.advanced?.log_level;
+                    if(!['debug','info','warn','error'].includes(desired))throw Error('Invalid log level');
+                    writes.push(desired);level=desired;
+                    if(initial&&scenario==='uncertain'){socket.destroy();continue;}
+                    publish(socket,'zigbee2mqtt/bridge/response/options',
+                        {status:'ok',transaction:payload.transaction,data:{}});
+                }
+                if(initial&&topic==='zigbee2mqtt/bridge/request/device/reporting/read'){
+                    if(scenario==='foreign')level='warn';
+                    socket.destroy();
+                }
+            }
+        }});
+    });
+    let child;
+    try{
+        await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+        await fs.mkdir(path.join(directory,'test/build'),{recursive:true});
+        await fs.writeFile(path.join(directory,'config.yaml'),'mqtt:\n  base_topic: zigbee2mqtt\n');
+        await fs.writeFile(path.join(directory,'local.json'),
+            JSON.stringify({mqttHost:'127.0.0.1',mqttPort:server.address().port,
+                zigbeeConfiguration:path.join(directory,'config.yaml'),
+                liveConverter:path.join(directory,'unused.mjs')}));
+        const env={...process.env,RACOOL_LOCAL_CONFIG:path.join(directory,'local.json'),
+            RACOOL_MQTT_HOST:'127.0.0.1',RACOOL_MQTT_PORT:String(server.address().port),
+            RACOOL_ZIGBEE_CONFIG:path.join(directory,'config.yaml'),
+            RACOOL_LIVE_CONVERTER:path.join(directory,'unused.mjs'),
+            RACOOL_DEVICE_IEEE:device.ieee_address,RACOOL_REPORT_TRAFFIC:'1'};
+        for(const key of ['RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE','RACOOL_RESULT_ID'])delete env[key];
+        child=spawn(process.execPath,[helper,'verify',control],{cwd:directory,env});
+        let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);
+        const exit=await new Promise((resolve,reject)=>{
+            const timer=setTimeout(()=>{child.kill();reject(Error('Bridge logging recovery test timed out'));},40000);
+            child.once('error',reject);
+            child.once('close',code=>{clearTimeout(timer);resolve(code);});
+        });
+        assert.equal(exit,1,output);
+        const result=JSON.parse(await fs.readFile(
+            path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
+        assert.equal(result.completed,false,output);
+        assert.equal(result.transportClosedBeforeCompletion,true,output);
+        assert.equal(result.bridgeLogRecovery?.status,
+            {confirmed:'restored',foreign:'foreign_change',uncertain:'delivery_unknown'}[scenario],output);
+        assert.deepEqual(writes,scenario==='confirmed'?['debug','info']:['debug']);
+        assert.equal(level,scenario==='confirmed'?'info':scenario==='foreign'?'warn':'debug');
+    } finally{
+        child?.kill();for(const socket of clients)socket.destroy();
+        await new Promise(resolve=>server.close(resolve));
+        await fs.rm(directory,{recursive:true,force:true});
+    }
+});
