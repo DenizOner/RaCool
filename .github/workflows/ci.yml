@@ -1,0 +1,142 @@
+name: RaCool CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  layout-and-helpers:
+    name: Layout & Helper Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Verify Test Layout
+        run: node test/check_test_layout.mjs
+
+      - name: Verify Test Inventory
+        run: node test/check_test_inventory.mjs
+
+      - name: Run Helper Test Suites
+        run: node test/run_helper_tests.mjs
+
+  native-tests:
+    name: Host Native Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install PlatformIO and Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-native-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-native-${{ runner.os }}-
+
+      - name: Install Native Test Dependencies
+        run: pio pkg install -e native
+
+      - name: Run Native Tests
+        run: node test/run_native_tests.mjs
+
+  build-firmware:
+    name: Build ESP32-C6 Firmware
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install PlatformIO
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Cache PlatformIO Core and Packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-firmware-${{ runner.os }}-${{ hashFiles('platformio.ini', 'idf_component.yml') }}
+          restore-keys: |
+            pio-firmware-${{ runner.os }}-
+
+      - name: Build Firmware (Production)
+        run: pio run -e esp32-c6-devkitc-1
+
+      - name: Upload Firmware Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: racool-firmware-esp32-c6
+          path: |
+            .pio/build/esp32-c6-devkitc-1/firmware.bin
+            .pio/build/esp32-c6-devkitc-1/bootloader.bin
+            .pio/build/esp32-c6-devkitc-1/partitions.bin
+          if-no-files-found: error

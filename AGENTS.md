@@ -4,7 +4,7 @@
 
 AGENTS.md contains durable, cross-cutting engineering and verification rules only. CODEBASE.md describes the current architecture, module responsibilities, interfaces, behavior and supported commands. Neither file is a work log: never append session summaries, completed or pending tasks, dated progress, acceptance counts or test results. Update the relevant existing section only when a lasting rule or technical contract changes.
 
-Write Turkish execution evidence, results, failures and limitations to DEV_VERIFICATION_REPORT.md. Keep only remaining tasks in TASK_CHECKLIST.md and unresolved module findings in MODULE_AUDIT.md. Put detailed module-specific procedures beside their module or test helper, and link to them rather than copying their history into these two documents. Historical snapshots in docs/archive are not active instructions. This separation applies to every agent and every completion handoff.
+Write Turkish or English execution evidence, results, failures and limitations to the corresponding GitHub Issue or Pull Request. Tasks, bugs, and remaining work are tracked as GitHub Issues on the repository. Put detailed module-specific procedures beside their module or test helper, and link to them rather than copying historical logs into documentation. Historical snapshots in docs/archive and legacy reports (DEV_VERIFICATION_REPORT.md, TASK_CHECKLIST.md, MODULE_AUDIT.md) are local records and are ignored from version control. This separation applies to every agent and every completion handoff.
 
 ## Product and authority
 
@@ -12,7 +12,7 @@ RaCool is a mains-powered ESP32-C6 revision 0.1 device with 8 MB flash, ESP-IDF/
 
 Follow the user's latest instructions and recorded approvals. Preserve earlier unfinished tasks when new requests arrive. Work autonomously on authorized changes and information discoverable from the repository or connected hardware. Ask for an approval only when the user explicitly requires one or an action exceeds the authorized scope. Physical color, display and encoder observations require the user; finish automatic tests first, then explain one action and expected observation and wait for the answer.
 
-`DEV_VERIFICATION_REPORT.md` narrative and task tracking must remain Turkish. Source identifiers, APIs and code comments must be English; translate legacy comments in edited code. Product labels may be Turkish. Preserve API names, paths and exact diagnostic excerpts when documenting evidence.
+GitHub Issues and Pull Requests may use Turkish or English narratives. Source identifiers, APIs and code comments must be English; translate legacy comments in edited code. Product labels may be Turkish. Preserve API names, paths and exact diagnostic excerpts when documenting evidence.
 
 Converter endpoint keys, MQTT property keys and internal identifiers must also be English and describe their responsibility. Keep Turkish user-facing labels/descriptions. Treat property renaming as an external-contract migration: inspect discovery, entities, automations, dashboards and test/helper consumers; preserve backups and validate the new routes before retiring old names.
 
@@ -38,9 +38,9 @@ Converter endpoint keys, MQTT property keys and internal identifiers must also b
 
 ## Efficient audit and task control
 
-Maintain one module audit ledger covering architecture, dependents, memory/concurrency, security, configuration, HA/OLED/CLI behavior, missing capabilities and tests. Record inspected paths and evidence once. Revisit only changed dependencies or unresolved findings; batch independent searches. Do not create parallel agents unless explicitly authorized.
+Maintain architectural discipline covering dependencies, memory/concurrency, security, configuration, HA/OLED/CLI behavior, and test suites. Record inspected paths and evidence once. Revisit only changed dependencies or unresolved findings; batch independent searches. Do not create parallel agents unless explicitly authorized.
 
-Keep only remaining tasks in tracking files and checklists; remove fully completed entries. Preserve detailed completed evidence in DEV_VERIFICATION_REPORT.md. Reconcile historical pending statements against later evidence; preserve failed/intermediate evidence and never promote partial acceptance to completion. Track every request in `TASK_CHECKLIST.md`, including approval status and evidence. Do not implement optional feature recommendations before user approval. Consult recorded user approvals and the corresponding plans before optional implementation. The final task is a complete top-to-bottom reconciliation of all requests, implementation, tests, live deployment and remaining physical observations. Update `CODEBASE.md` when interfaces, modules, build/test commands or behavior change.
+Track all bugs, enhancements, and acceptance tasks in GitHub Issues. Use feature/fix branches and Pull Requests with linked issues (`Closes #<id>`). GitHub Actions CI automatically validates test layout, test inventory, helper test suites, host native tests, and warning-free PlatformIO firmware compilation on every PR and push to `main`. Do not implement optional feature recommendations before user approval. The final task of a milestone is a complete reconciliation of all issues, implementation, tests, and remaining physical observations. Update `CODEBASE.md` when interfaces, modules, build/test commands or behavior change.
 
 ## Workstation and live access
 
@@ -96,7 +96,7 @@ Capture actual successful SSD1306 page payloads with test/Hardware/OLED/diagnost
 
 Inspect and revise only one screen at a time against its Stitch RaCool reference, then validate transmitted pixels before moving on. Autonomous menu navigation is authorized. Do not confirm destructive actions to capture a page: a first click may enter a default-No confirmation, never send its action click. Preserve configuration and locale.
 
-For the current user-authorized physical observation session, keep the screen in always-on mode across turns. Keep menu auto-exit disabled with `menu auto-exit off`; its factory default is enabled and the setting persists across restart. Save its original automatic mode and timeout, verify the applied owner state and track restoration explicitly in TASK_CHECKLIST.md. Restore automatic mode, run `menu auto-exit on`, and verify the original timeout plus the enabled auto-exit value only when physical observations end, or the user requests restoration. Other temporary tests retain their checked finally restoration. Do not repeat accepted physical observations without identifying a relevant change or missing coverage. Give one clear action/expected observation and wait for the user.
+For the current user-authorized physical observation session, keep the screen in always-on mode across turns. Keep menu auto-exit disabled with `menu auto-exit off`; its factory default is enabled and the setting persists across restart. Save its original automatic mode and timeout, verify the applied owner state and track restoration explicitly in the active GitHub Issue or PR checklist. Restore automatic mode, run `menu auto-exit on`, and verify the original timeout plus the enabled auto-exit value only when physical observations end, or the user requests restoration. Other temporary tests retain their checked finally restoration. Do not repeat accepted physical observations without identifying a relevant change or missing coverage. Give one clear action/expected observation and wait for the user.
 
 ## Critical implementation boundaries
 

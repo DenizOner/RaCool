@@ -1,6 +1,6 @@
 # RaCool codebase reference
 
-This file describes the current implementation, not execution history or task status. Engineering rules live in [AGENTS.md](AGENTS.md), execution evidence in [DEV_VERIFICATION_REPORT.md](DEV_VERIFICATION_REPORT.md), and remaining work in [TASK_CHECKLIST.md](TASK_CHECKLIST.md). Update existing sections when interfaces or behavior change; do not append completion reports. Historical document snapshots in docs/archive are non-authoritative.
+This file describes the current implementation, not execution history or task status. Engineering rules live in [AGENTS.md](AGENTS.md), task tracking lives in GitHub Issues, and automated verification runs via GitHub Actions CI. Update existing sections when interfaces or behavior change; do not append completion reports. Historical document snapshots in docs/archive are non-authoritative.
 
 ## Platform and build ownership
 
