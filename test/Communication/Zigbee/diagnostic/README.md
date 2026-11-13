@@ -16,10 +16,16 @@ tamamlandıktan sonra sonuç JSON'unu yazar. Altı rapor aralığından biri se�
 ve özellik eşleşmesi doğrulanır; ZCL ile doğrulanmış yardımcı
 değeri aynı IEEE cihazına yeni bağlantı, taze korelasyonlu ZCL okuma ve tek
 geri yazma/son okuma ile koşullu geri yüklenir. Belirsiz teslim veya yabancı
-değer otomatik yazılmaz. Diğer ayarlar ve köprü log seviyesi için ayrı bağlantı
-ile otomatik kurtarma yoktur; başarısız sonuçta sahipliği ve taze değerleri
-bağımsız doğrulayın. Belirsiz mutasyonu körlemesine yinelemeyin. Okuma ile
-yazma arasında başka bir aktöre karşı atomik kilit yoktur.
+değer otomatik yazılmaz. Köprü log seviyesini geçici olarak debug'a alan verify/verify-fan/observe-fan-sources
+koşuları, önceki seviyeyi kaydeder. MQTT bağlantısı kesilirse, yalnızca yanıtı
+korelasyonlu biçimde onaylanmış log değişikliği için ayrı bağlantılarla köprü
+info değeri okunur, beklenen debug seviyesi hâlâ geçerliyse geri yazılır ve
+sonraki yeni bağlantıda tekrar okunur. Teslim belirsizse veya başka bir aktörün
+seviyesi gözlenirse otomatik yazılmaz; JSON'da delivery_unknown/foreign_change
+bırakılır. Köprü genelinde atomik karşılaştır-yazma yoktur ve bağlantıdaki
+info snapshot'ı diğer aktörlerle eşzamanlı bir işlem kanıtı değildir.
+Diğer ayarlar için ayrı bağlantıda otomatik kurtarma yoktur. Belirsiz
+mutasyonu körlemesine yinelemeyin.
 
 `node test/Communication/Zigbee/diagnostic/live_zigbee.mjs read-interval-wire
 report_interval_radiator_s` seçilen cihazda raporlama aralığını korelasyonlu raw
