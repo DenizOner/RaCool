@@ -75,6 +75,7 @@ for (const suite of selected) {
         console.log('[RUN] '+suite.name);
         const run=spawnSync(exe,[],{cwd:root,encoding:'utf8',maxBuffer:16*1024*1024,timeout:suite.timeoutMs??30000,windowsHide:true});
         log+=(run.stdout??'')+(run.stderr??'');
+        if(run.status!==0||run.signal){log+='\n[EXIT] status='+run.status+' signal='+run.signal;}
         const counts=[...log.matchAll(/(\d+) Tests (\d+) Failures (\d+) Ignored/g)].at(-1);
         result={...result,status:run.status===0 && counts && +counts[1]>0 && +counts[2]===0 && +counts[3]===0?'passed':'failed',
             tests:counts?+counts[1]:0,failures:counts?+counts[2]:0,ignored:counts?+counts[3]:0,exitCode:run.status};

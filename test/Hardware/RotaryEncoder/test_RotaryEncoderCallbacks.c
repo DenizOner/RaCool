@@ -35,7 +35,7 @@ static esp_err_t unavailable_encoder_diagnostics(IRotaryEncoder *self,RotaryEnco
 void test_Encoder_DiagnosticCommandsRejectUnavailableSummaryAndMalformedArguments(void) {
     RotaryEncoder_GetModule();
     IRotaryEncoder saved=rotaryEncoderService.base;
-    char *diag[]={"ENCDIAG"},*info[]={"ENC"};
+    char *diag[]={"ENCDIAG",NULL},*info[]={"ENC",NULL};
     TEST_ASSERT_EQUAL(1,cmd_enc_diag(1,NULL)); TEST_ASSERT_EQUAL(1,cmd_enc_info(1,NULL));
     TEST_ASSERT_EQUAL(1,cmd_enc_diag(2,diag)); TEST_ASSERT_EQUAL(1,cmd_enc_info(2,info));
     rotaryEncoderService.base.GetDiagnostics=unavailable_encoder_diagnostics;
@@ -500,7 +500,7 @@ void test_EncoderSavePersistsOneCoherentRuntimeSnapshotAndReportsFailure(void) {
     rotaryEncoderService.runtime_config.invert_direction=true;
     IConfigurationManager config={.UpdateFields=capture_encoder_save};
     mocked_ConfigurationManager_GetInstance_fake.return_val=&config;
-    char *args[]={"ENCSAVE"}; encoder_save_calls=0; encoder_save_result=ESP_FAIL;
+    char *args[]={"ENCSAVE",NULL}; encoder_save_calls=0; encoder_save_result=ESP_FAIL;
     TEST_ASSERT_EQUAL(1,cmd_enc_save(1,args)); TEST_ASSERT_EQUAL(1,encoder_save_calls);
     encoder_save_result=ESP_OK;
     TEST_ASSERT_EQUAL(0,cmd_enc_save(1,args)); TEST_ASSERT_EQUAL(2,encoder_save_calls);
