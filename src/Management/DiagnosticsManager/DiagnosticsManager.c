@@ -219,12 +219,34 @@ static bool RunScan(void) {
     return CommitScan();
 }
 
+/* A periodic sample while Zigbee is restarting is not an accurate health
+ * snapshot. Defer it briefly, but still report a persistent failure. Explicit
+ * self-tests remain immediate so operators can inspect a failing service. */
+static bool ZigbeeReadyForPeriodicScan(void) {
+    for (uint32_t i = 0; i < diagManager.config.criticalServiceCount; ++i) {
+        if (strcmp(diagManager.config.criticalServices[i], SVC_NAME_ZIGBEE) != 0) continue;
+        IService *service = ServiceLocator_GetService(SVC_NAME_ZIGBEE);
+        return service && service->CheckHealth && service->CheckHealth(service) == 0;
+    }
+    return true;
+}
+
+static bool DeferPeriodicScan(TickType_t now, bool ready,
+                               bool *waiting, TickType_t *started) {
+    if (ready) { *waiting = false; return false; }
+    if (!*waiting) { *waiting = true; *started = now; }
+    return (TickType_t)(now - *started) <
+        PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS);
+}
+
 /* One worker owns scans and the emergency deadline. Stop only deletes it after
  * the worker suspends outside every callback and lock. */
 static void DiagnosticWorker(void *unused) {
     (void)unused;
     TickType_t started = xTaskGetTickCount(), lastScan = started, emergencyAt = 0;
     bool emergencyStarted = false;
+    TickType_t zigbeeWaitStarted = 0;
+    bool zigbeeWaiting = false;
     while (!atomic_load(&diagManager.stopRequested)) {
         TickType_t now = xTaskGetTickCount();
         if (atomic_load(&diagManager.emergency)) {
@@ -235,13 +257,18 @@ static void DiagnosticWorker(void *unused) {
             vTaskDelay(PositiveTicks(DIAGNOSTICS_WORKER_POLL_MS));
             continue;
         }
-        bool run = false, initial = false;
+        bool run = false, initial = false, explicitRequest = false, periodicDue = false;
         if (Lock()) {
             initial = diagManager.initialPending;
-            run = diagManager.requested || (!initial && diagManager.periodicRunning &&
-                (TickType_t)(now - lastScan) >= PositiveTicks(diagManager.config.periodicIntervalMs));
+            explicitRequest = diagManager.requested;
+            periodicDue = !initial && diagManager.periodicRunning &&
+                (TickType_t)(now - lastScan) >= PositiveTicks(diagManager.config.periodicIntervalMs);
+            run = explicitRequest || periodicDue;
             xSemaphoreGive(diagManager.mutex);
         }
+        if (periodicDue && !explicitRequest && !diagManager.scanPending &&
+            DeferPeriodicScan(now, ZigbeeReadyForPeriodicScan(),
+                              &zigbeeWaiting, &zigbeeWaitStarted)) run = false;
         if (initial && !run) {
             bool ready = true;
             for (uint32_t i = 0; i < diagManager.config.criticalServiceCount; ++i) {
@@ -252,8 +279,10 @@ static void DiagnosticWorker(void *unused) {
             }
             run = ready || (TickType_t)(now - started) >= PositiveTicks(DIAGNOSTICS_STARTUP_READY_TIMEOUT_MS);
         }
-        if ((run || diagManager.scanPending) && RunScan())
+        if ((run || diagManager.scanPending) && RunScan()) {
             lastScan = xTaskGetTickCount();
+            zigbeeWaiting = false;
+        }
         vTaskDelay(PositiveTicks(DIAGNOSTICS_WORKER_POLL_MS));
     }
     atomic_store(&diagManager.exited, true);
