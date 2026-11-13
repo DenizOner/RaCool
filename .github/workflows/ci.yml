@@ -56,6 +56,10 @@ jobs:
       - name: Build Firmware (Production ESP32-C6)
         run: pio run -e esp32-c6-devkitc-1
 
+      # Temporary upgrade evidence. Remove after committing the regenerated lock.
+      - name: Show resolved Zigbee dependency lock
+        run: cat dependencies.lock
+
       - name: Install Native Test Dependencies
         run: pio pkg install -e native
 
