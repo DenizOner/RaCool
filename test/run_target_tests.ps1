@@ -2,12 +2,18 @@ param([string]$PlatformioPython, [string]$Port = $env:RACOOL_SERIAL_PORT)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if (!$PlatformioPython) {
-    $platformCore = $env:PLATFORMIO_CORE_DIR
-    if (!$platformCore) {
-        $platformCore = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.platformio'
+    if ($env:RACOOL_PYTHON -and (Test-Path -LiteralPath $env:RACOOL_PYTHON)) {
+        $PlatformioPython = $env:RACOOL_PYTHON
+    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+        $PlatformioPython = (Get-Command python).Source
+    } else {
+        $platformCore = $env:PLATFORMIO_CORE_DIR
+        if (!$platformCore) {
+            $platformCore = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.platformio'
+        }
+        $pythonRelative = if ([Environment]::OSVersion.Platform -eq 'Win32NT') { 'penv/Scripts/python.exe' } else { 'penv/bin/python' }
+        $PlatformioPython = Join-Path $platformCore $pythonRelative
     }
-    $pythonRelative = if ([Environment]::OSVersion.Platform -eq 'Win32NT') { 'penv/Scripts/python.exe' } else { 'penv/bin/python' }
-    $PlatformioPython = Join-Path $platformCore $pythonRelative
 }
 if (!(Test-Path -LiteralPath $PlatformioPython)) {
     throw 'PlatformIO Python was not found. Pass -PlatformioPython or configure PLATFORMIO_CORE_DIR.'

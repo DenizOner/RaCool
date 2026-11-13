@@ -37,7 +37,11 @@ $env:RACOOL_WRAPPER_CASE = 'error'
 $logPath = Join-Path $harnessRoot 'result.log'
 # This child intentionally exits nonzero; collect all diagnostic lines.
 $ErrorActionPreference = 'Continue'
-powershell.exe -ExecutionPolicy Bypass -File (Join-Path $harnessRoot 'test/run_target_tests.ps1') -PlatformioPython (Join-Path $projectRoot '.venv/Scripts/python.exe') -Port 'TEST_USB_PORT' *> $logPath
+$py = if ($env:RACOOL_PYTHON -and (Test-Path -LiteralPath $env:RACOOL_PYTHON)) { $env:RACOOL_PYTHON } `
+      elseif (Test-Path (Join-Path $projectRoot '.venv/Scripts/python.exe')) { (Join-Path $projectRoot '.venv/Scripts/python.exe') } `
+      elseif (Get-Command python -ErrorAction SilentlyContinue) { (Get-Command python).Source } `
+      else { 'python' }
+powershell.exe -ExecutionPolicy Bypass -File (Join-Path $harnessRoot 'test/run_target_tests.ps1') -PlatformioPython $py -Port 'TEST_USB_PORT' *> $logPath
 $result = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 $text = Get-Content -LiteralPath $logPath -Raw
