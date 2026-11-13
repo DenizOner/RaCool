@@ -198,6 +198,14 @@ events.on('message',(topic,value,retained)=>{
         else discoveryInbox.set(topic, value);
     }
     if(topic===base+'/'+seen.device?.friendly_name){seen.state=value;stateEvidence.observe(value,retained);if(mode==='inspect')console.log('STATE',JSON.stringify(value));
+        /* Recovery child SET can finish as soon as a fresh post-GET state
+         * confirms the requested value. Interactive SET keeps its old window. */
+        if(mode==='set' && resultId && seen.command?.readable &&
+            Number.isInteger(seen.command.readSequence)) {
+            const evidence=stateEvidence.matchAfter(seen.command.readSequence,
+                seen.command.property,seen.command.value);
+            if(evidence) {seen.command.evidence=evidence;seen.command.actual=evidence.actual;socket.end();}
+        }
         if([...longVerificationModes,'read','read-ranges','read-zone'].includes(mode)&&!started){started=true;trackOperation((['read-fan-sources','verify-fan-sources','observe-fan-sources'].includes(mode) ? runFanSourceChecks() : mode==='verify-fan' ? runFanChecks() : mode==='read-zone' ? runZoneRead() : mode==='read-ranges' ? runRangeRead() : mode==='verify-zone' ? runZoneChecks() : mode==='read-color'||mode==='verify-color' ? runColorChecks() : runChecks()).catch(e=>{seen.operationError=e.message;seen.completed=false;console.error('VERIFY_FAILED',e.message);process.exitCode=1;}).finally(()=>socket.end()));}}
     if(topic.includes('/bridge/response/')){console.log('RESPONSE',JSON.stringify(value));seen.responses??=[];seen.responses.push({topic,...value});if(value.status==='error')process.exitCode=1;}
     if(topic.endsWith('/bridge/logging') && value.level==='error'){
