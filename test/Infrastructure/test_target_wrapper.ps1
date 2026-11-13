@@ -61,7 +61,7 @@ try {
         $env:RACOOL_WRAPPER_CASE = $scenario
         $scenarioLog = Join-Path $harnessRoot ($scenario + '.log')
         $ErrorActionPreference = 'Continue'
-        powershell.exe -ExecutionPolicy Bypass -File (Join-Path $harnessRoot 'test/run_target_tests.ps1') -PlatformioPython (Join-Path $projectRoot '.venv/Scripts/python.exe') -Port 'TEST_USB_PORT' *> $scenarioLog
+        powershell.exe -ExecutionPolicy Bypass -File (Join-Path $harnessRoot 'test/run_target_tests.ps1') -PlatformioPython $py -Port 'TEST_USB_PORT' *> $scenarioLog
         $scenarioExit = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
         $expectedExit = if ($scenario -eq 'clean') { 0 } else { 1 }
