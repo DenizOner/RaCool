@@ -330,6 +330,86 @@ void test_DiagnosticsManager_ReadyInitialScanUsesSameWorker(void) {
     TEST_ASSERT_EQUAL(0, mocked_xTaskCreate_fake.call_count);
 }
 
+static void FinishPeriodicEvidence(TickType_t ticks) {
+    testTicks += ticks;
+    if (diagManager.lastResult.completed || testTicks > pdMS_TO_TICKS(40000)) {
+        atomic_store(&diagManager.stopRequested, true);
+    }
+}
+
+static void RecoverZigbeeAndFinish(TickType_t ticks) {
+    testTicks += ticks;
+    if (testTicks >= pdMS_TO_TICKS(1500)) readinessService.CheckHealth = Healthy;
+    if (diagManager.lastResult.completed || testTicks > pdMS_TO_TICKS(40000)) {
+        atomic_store(&diagManager.stopRequested, true);
+    }
+}
+
+static void ConfigureUnhealthyPeriodicZigbee(void) {
+    diagManager.config.criticalServiceCount = 1;
+    diagManager.config.criticalServices[0] = SVC_NAME_ZIGBEE;
+    diagManager.config.periodicIntervalMs = 1000;
+    diagManager.periodicRunning = true;
+    diagManager.initialPending = false;
+    readinessService.CheckHealth = Unhealthy;
+    mocked_ServiceLocator_GetService_fake.return_val = &readinessService;
+    mocked_xTaskGetTickCount_fake.custom_fake = ReadTicks;
+    testTicks = 0;
+}
+
+void test_DiagnosticsManager_PeriodicScanDefersTransientZigbeeFailure(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    mocked_vTaskDelay_fake.custom_fake = RecoverZigbeeAndFinish;
+    DiagnosticWorker(NULL);
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(1, diagManager.lastResult.services_checked);
+    TEST_ASSERT_EQUAL(100, diagManager.lastResult.health_score);
+    TEST_ASSERT_GREATER_OR_EQUAL(pdMS_TO_TICKS(1500), testTicks);
+    TEST_ASSERT_LESS_THAN(pdMS_TO_TICKS(4000), testTicks);
+}
+
+void test_DiagnosticsManager_PeriodicScanReportsPersistentZigbeeFailure(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    mocked_vTaskDelay_fake.custom_fake = FinishPeriodicEvidence;
+    DiagnosticWorker(NULL);
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(1, diagManager.lastResult.services_checked);
+    TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
+    TEST_ASSERT_EQUAL_STRING(SVC_NAME_ZIGBEE, diagManager.lastResult.last_failed_service);
+    TEST_ASSERT_GREATER_OR_EQUAL(pdMS_TO_TICKS(1000 + DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS), testTicks);
+    TEST_ASSERT_LESS_THAN(pdMS_TO_TICKS(40000), testTicks);
+}
+
+void test_DiagnosticsManager_ExplicitScanIsNotDeferred(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    diagManager.periodicRunning = false;
+    diagManager.requested = true;
+    mocked_vTaskDelay_fake.custom_fake = FinishPeriodicEvidence;
+    DiagnosticWorker(NULL);
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
+    TEST_ASSERT_LESS_THAN(pdMS_TO_TICKS(1000), testTicks);
+}
+
+void test_DiagnosticsManager_PeriodicGraceIsWrapSafe(void) {
+    setUp_DiagnosticsManager();
+    bool waiting = false;
+    TickType_t started = 0;
+    TickType_t now = (TickType_t)(~(TickType_t)0 - PositiveTicks(1000));
+    TEST_ASSERT_TRUE(DeferPeriodicScan(now, false, &waiting, &started));
+    TEST_ASSERT_TRUE(waiting);
+    TEST_ASSERT_TRUE(DeferPeriodicScan((TickType_t)(now + PositiveTicks(2000)),
+                                       false, &waiting, &started));
+    TEST_ASSERT_FALSE(DeferPeriodicScan((TickType_t)(now +
+        PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS)), false, &waiting, &started));
+    TEST_ASSERT_FALSE(DeferPeriodicScan((TickType_t)(now + PositiveTicks(35000)),
+                                        true, &waiting, &started));
+    TEST_ASSERT_FALSE(waiting);
+}
+
 void test_DiagnosticsManager_LateThermalCallbackKeepsWorkerAlive(void) {
     setUp_DiagnosticsManager();
     IDiagnosticsManager *dm = DiagnosticsManager_GetModule();
