@@ -17,7 +17,14 @@ function publish(socket,topic,value){
 
 for(const [scenario,kind,endpoint,attribute,suffix] of [
     ...['confirmed','foreign','uncertain','identity','reconfigure'].map(s=>[s,'radiator',1,0x8030,'climate']),
-    ['confirmed','ambient',4,0x8031,'ambient_sensor']
+    ...[
+        ['ambient',4,0x8031,'ambient_sensor'],
+        ['processor',5,0x8032,'processor_sensor'],
+        ['health',6,0x8033,'system_health'],
+        ['memory',7,0x8034,'memory'],
+        ['uptime',8,0x8035,'uptime']
+    ].flatMap(([kind,endpoint,attribute,suffix]) =>
+        ['confirmed','foreign'].map(scenario=>[scenario,kind,endpoint,attribute,suffix]))
 ]) test('recovery after '+scenario+' disconnect: '+kind,async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-recovery-'));
     let value=3, first=true, writes=[], clients=new Set();
