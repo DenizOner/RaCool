@@ -31,7 +31,7 @@ ZCL yanıtıyla salt okunur sorgular. Aynı kip `ambient`, `processor`, `health`
 `report_trace.c` dosyasını ve on linker wrapper'ını ekler. Varsayılan OFF'tur.
 PlatformIO `esp32-c6-zigbee-report-trace` ortamı bu seçeneği yalnız kendi
 geçici imajında açar; doğrulama sonrası üretim ortamı geri yüklenmelidir.
-SDK 2.0.4'ün mevcut ELF çağrı yollarına bağlıdır; SDK değişince imzaları,
+Bağlandığı SDK sürümünün ELF çağrı yollarına bağlıdır; 2.0.5 yükseltmesinde imzaları,
 link edilmiş çağrı noktalarını ve gerçek hook sayaçlarını yeniden doğrulayın.
 Özel SDK yapıları okunmaz/yazılmaz; opak pointer ve dönüşler aynen iletilir.
 Wrapper'lar SDK davranışını veya rapor sonucunu değiştirmez.
