@@ -11,10 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  RACOOL_PYTHON: python
+
 jobs:
   layout-and-helpers:
-    name: Layout & Helper Tests
-    runs-on: ubuntu-latest
+    name: Layout & Helper Tests (Windows)
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,7 +40,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Verify Test Layout
@@ -50,7 +53,7 @@ jobs:
         run: node test/run_helper_tests.mjs
 
   native-tests:
-    name: Host Native Unit Tests
+    name: Host Native Unit Tests (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -74,7 +77,7 @@ jobs:
 
       - name: Install PlatformIO and Dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Cache PlatformIO packages
@@ -94,13 +97,13 @@ jobs:
         run: node test/run_native_tests.mjs
 
   build-firmware:
-    name: Build ESP32-C6 Firmware
+    name: Build ESP32-C6 Firmware (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js (for font & asset generators)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -118,7 +121,7 @@ jobs:
 
       - name: Install PlatformIO
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Cache PlatformIO Core and Packages
