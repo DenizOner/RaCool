@@ -142,3 +142,4 @@ Every pull request and push to `main` triggers our automated [GitHub Actions CI]
 
 See [AGENTS.md](AGENTS.md) for engineering directives, memory management, lock hierarchies, and hardware constraints.  
 See [CODEBASE.md](CODEBASE.md) for detailed module architecture and supported CLI commands.
+

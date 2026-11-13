@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import unittest
 import uuid
 
@@ -32,7 +33,7 @@ fs.writeFileSync('test/build/live-ran.json','{}');
 fs.writeFileSync('test/build/zigbee-live-verify.json','{}');
 process.exit(process.env.HEALTH_WRAPPER_CASE === 'live_error' ? 1 : 0);
 ''', encoding='utf-8')
-                env = {**os.environ, 'HEALTH_WRAPPER_CASE': scenario}
+                env = {**os.environ, 'HEALTH_WRAPPER_CASE': scenario, 'PYTHONPATH': str(work), 'RACOOL_PYTHON': sys.executable}
                 result = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
                                          '-File', str(wrapper), '-Port', 'FAKE'], cwd=work,
                                         env=env, capture_output=True, timeout=45)

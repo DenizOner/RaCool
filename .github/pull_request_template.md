@@ -22,3 +22,4 @@ Bağlantılı Issue / Related Issue: Closes #
 - [ ] Kod standartlarına uygun ve gereksiz yorumlar temizlendi
 - [ ] Yeni/güncellenen API ve modüller için testler eklendi/güncellendi
 - [ ] Hiçbir gizli bilgi veya yerel ayar commit edilmedi
+

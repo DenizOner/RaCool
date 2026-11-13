@@ -1,7 +1,10 @@
 param([Parameter(Mandatory=$true)][string]$Port)
 $ErrorActionPreference = 'Stop'
-$taskCore = if ($env:PLATFORMIO_CORE_DIR) { $env:PLATFORMIO_CORE_DIR } else { Join-Path $env:USERPROFILE '.platformio' }
-$taskPython = Join-Path $taskCore 'penv/Scripts/python.exe'
+$taskPython = if ($env:RACOOL_PYTHON) { $env:RACOOL_PYTHON } `
+              elseif ($env:PLATFORMIO_CORE_DIR -and (Test-Path (Join-Path $env:PLATFORMIO_CORE_DIR 'penv/Scripts/python.exe'))) { Join-Path $env:PLATFORMIO_CORE_DIR 'penv/Scripts/python.exe' } `
+              elseif (Test-Path (Join-Path $env:USERPROFILE '.platformio/penv/Scripts/python.exe')) { Join-Path $env:USERPROFILE '.platformio/penv/Scripts/python.exe' } `
+              elseif (Get-Command python -ErrorAction SilentlyContinue) { (Get-Command python).Source } `
+              else { 'python' }
 $previousBuild = $env:PLATFORMIO_BUILD_DIR
 $previousSerial = $env:RACOOL_SERIAL_PORT
 $previousChanges = $env:RACOOL_REPORT_CHANGES

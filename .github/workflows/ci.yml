@@ -16,7 +16,7 @@ env:
 
 jobs:
   layout-and-helpers:
-    name: Layout & Helper Tests (Windows)
+    name: Layout & Helper Suites (Windows)
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -49,61 +49,17 @@ jobs:
       - name: Verify Test Inventory
         run: node test/check_test_inventory.mjs
 
-      - name: Run Helper Test Suites
+      - name: Run Helper Test Suites (82 suites)
         run: node test/run_helper_tests.mjs
 
-  native-tests:
-    name: Host Native Unit Tests (Linux)
+  build-and-native-tests:
+    name: Firmware Build & Host Native Tests (Linux)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: 'requirements.txt'
-
-      - name: Install PlatformIO and Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.platformio
-            .pio
-          key: pio-native-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: |
-            pio-native-${{ runner.os }}-
-
-      - name: Install Native Test Dependencies
-        run: pio pkg install -e native
-
-      - name: Run Native Tests
-        run: node test/run_native_tests.mjs
-
-  build-firmware:
-    name: Build ESP32-C6 Firmware (Linux)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
+      - name: Setup Node.js (for asset & font generators)
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -134,8 +90,14 @@ jobs:
           restore-keys: |
             pio-firmware-${{ runner.os }}-
 
-      - name: Build Firmware (Production)
+      - name: Build Firmware (Production ESP32-C6)
         run: pio run -e esp32-c6-devkitc-1
+
+      - name: Install Native Test Dependencies
+        run: pio pkg install -e native
+
+      - name: Run Host Native Unit Tests (86 suites, 1540 cases)
+        run: node test/run_native_tests.mjs
 
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
