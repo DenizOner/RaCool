@@ -1,0 +1,6 @@
+{
+  "devices": [
+    {"name":"Salon", "ieee":"0x0000000000000001", "command_topic":"zigbee2mqtt/RaCool Salon/set"},
+    {"name":"Çalışma odası", "ieee":"0x0000000000000002", "command_topic":"zigbee2mqtt/RaCool Study/set"}
+  ]
+}

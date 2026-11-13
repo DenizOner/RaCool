@@ -1,0 +1,83 @@
+[
+  {
+    "file": "test/Controllers/UIController/diagnostic/verify_led_startup.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "node",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Controllers/ClimateController/diagnostic/verify_fan_sources.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Communication/Zigbee/diagnostic/verify_zigbee_lifecycle.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Hardware/BuiltinLED/test_BuiltinLEDE2E.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Hardware/InfraredTemperatureSensor/test_IRTempE2E.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Management/DiagnosticsManager/test_DiagnosticsE2E.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Hardware/InternalTemperatureSensor/diagnostic/capture_calibration_change.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Controllers/UIController/diagnostic/verify_oled_language_menu.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Hardware/OLED/diagnostic/capture_frame.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  },
+  {
+    "file": "test/Controllers/UIController/diagnostic/capture_oled_gallery.py",
+    "kind": "serial",
+    "requires": [
+      "port",
+      "output"
+    ]
+  }
+]

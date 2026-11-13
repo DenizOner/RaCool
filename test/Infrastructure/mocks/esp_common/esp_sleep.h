@@ -1,0 +1,26 @@
+#ifndef ESP_SLEEP_H
+#define ESP_SLEEP_H
+
+#include <stdint.h>
+
+typedef enum {
+    ESP_SLEEP_GPIO_WAKEUP_HIGH = 1,
+    ESP_SLEEP_GPIO_WAKEUP_LOW = 0,
+} esp_deepsleep_gpio_wake_up_mode_t;
+
+typedef enum {
+    ESP_SLEEP_WAKEUP_UNDEFINED = 0,
+    ESP_SLEEP_WAKEUP_ALL,
+    ESP_SLEEP_WAKEUP_EXT0,
+    ESP_SLEEP_WAKEUP_EXT1,
+    ESP_SLEEP_WAKEUP_TIMER,
+    ESP_SLEEP_WAKEUP_TOUCHPAD,
+    ESP_SLEEP_WAKEUP_ULP,
+    ESP_SLEEP_WAKEUP_GPIO,
+    ESP_SLEEP_WAKEUP_UART,
+    ESP_SLEEP_WAKEUP_WIFI,
+    ESP_SLEEP_WAKEUP_COCPU
+} esp_sleep_source_t;
+
+#endif /* ESP_SLEEP_H */
+

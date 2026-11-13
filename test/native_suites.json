@@ -1,0 +1,913 @@
+[
+  {
+    "name": "SystemInitializerStartup",
+    "file": "test/Core/SystemInitializer/test_SystemInitializerStartup.c",
+    "generateRunner": true
+  },
+  {
+    "name": "RotaryEncoderCallbacks",
+    "file": "test/Hardware/RotaryEncoder/test_RotaryEncoderCallbacks.c",
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "RotaryEncoderPCNTOwnership",
+    "file": "test/Hardware/RotaryEncoder/test_RotaryEncoderPCNTOwnership.c",
+    "generateRunner": true
+  },
+  {
+    "name": "ServiceLocator",
+    "file": "test/Core/ServiceLocator/test_ServiceLocator.c",
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "ApplicationManager",
+    "file": "test/Management/ApplicationManager/test_ApplicationManager.c",
+    "sources": [
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "ConfigurationManager",
+    "localization": true,
+    "file": "test/Management/ConfigurationManager/test_ConfigurationManager.c",
+    "sources": [
+      "src/Management/ConfigurationManager/ConfigurationManager.c",
+      "src/Communication/DebugConsole/Core/DeveloperMode.c",
+      "test/Infrastructure/support/esp_console_split_argv.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c",
+      "src/Management/Watchdog/WatchdogWorker.c",
+      "src/Controllers/ClimateController/ClimateConsoleCommands.c"
+    ]
+  },
+  {
+    "name": "RGBLED",
+    "file": "test/Hardware/RGBLED/test_RGBLED_Native.c",
+    "sources": [
+      "src/Hardware/LEDAnimations/LEDTransition.c",
+      "src/Hardware/LEDAnimations/LEDAnimationInstances.c",
+      "src/Hardware/LEDAnimations/BlinkRedAnim.c",
+      "src/Hardware/LEDAnimations/BlinkWhiteAnim.c",
+      "src/Hardware/LEDAnimations/BreathingGreenAnim.c",
+      "src/Hardware/LEDAnimations/BreathingRedAnim.c",
+      "src/Hardware/LEDAnimations/DoubleBlinkWhiteAnim.c",
+      "src/Hardware/LEDAnimations/FadeBlueAnim.c",
+      "src/Hardware/LEDAnimations/HeartbeatAnim.c",
+      "src/Hardware/LEDAnimations/PoliceStrobeAnim.c",
+      "src/Hardware/LEDAnimations/SolidBlueAnim.c",
+      "src/Hardware/LEDAnimations/SolidGreenAnim.c",
+      "src/Hardware/LEDAnimations/SolidRedAnim.c",
+      "src/Hardware/LEDAnimations/SolidWhiteAnim.c",
+      "src/Hardware/LEDAnimations/SOSRedAnim.c",
+      "src/Hardware/LEDAnimations/StrobeWhiteAnim.c",
+      "src/Hardware/LEDAnimations/LEDAnimationPatterns.c",
+      "src/Hardware/LEDAnimations/GenericPatternsAnim.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "ErrorHandler",
+    "file": "test/Core/ErrorHandler/test_ErrorHandler.c",
+    "sources": [
+      "src/Core/ErrorHandler/ErrorHandlerConsoleCommands.c",
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "ClimateController",
+    "file": "test/Controllers/ClimateController/test_ClimateController.c",
+    "sources": [
+      "src/Controllers/MenuManager/MenuRangeEditor.c",
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ]
+  },
+  {
+    "name": "UIController",
+    "file": "test/Controllers/UIController/test_UIController.c",
+    "sources": [
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Controllers/UIController/UITranslation.c",
+      "src/Hardware/RGBLED/RGBZoneSelection.c",
+      "src/Hardware/LEDAnimations/RainbowFlowAnim.c",
+      "src/Controllers/MenuManager/MenuRangeEditor.c",
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "MenuManager",
+    "file": "test/Controllers/MenuManager/test_MenuManager.c",
+    "sources": [
+      "src/Controllers/UIController/Widgets/WidgetRGB.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/Watchdog/WatchdogWorker.c",
+      "src/Controllers/MenuManager/MenuNavigator.c",
+      "src/Controllers/MenuManager/MenuStateMachine.c",
+      "src/Controllers/MenuManager/MenuPluginManager.c",
+      "src/Controllers/MenuManager/MenuManagerConfig.c",
+      "src/Controllers/UIController/Widgets/WidgetLED.c",
+      "src/Controllers/UIController/Widgets/WidgetSystem.c",
+      "src/Controllers/UIController/UITranslation.c",
+      "src/Controllers/UIController/Widgets/WidgetTemp.c",
+      "src/Hardware/RGBLED/RGBZoneSelection.c",
+      "src/Controllers/MenuManager/MenuRangeEditor.c",
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "BuiltinLED",
+    "file": "test/Hardware/BuiltinLED/test_BuiltinLED.c",
+    "sources": [
+      "src/Hardware/LEDAnimations/LEDTransition.c",
+      "src/Management/Watchdog/WatchdogWorker.c",
+      "src/Hardware/LEDAnimations/LEDAnimationPatterns.c",
+      "src/Hardware/LEDAnimations/GenericPatternsAnim.c",
+      "src/Hardware/LEDAnimations/LEDAnimationInstances.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "InfraredTemperatureSensor",
+    "file": "test/Hardware/InfraredTemperatureSensor/test_InfraredTemperatureSensor.c",
+    "sources": [],
+    "localization": true
+  },
+  {
+    "name": "Relay",
+    "localization": true,
+    "file": "test/Hardware/Relay/test_Relay.c",
+    "sources": []
+  },
+  {
+    "name": "PowerManager",
+    "localization": true,
+    "file": "test/Management/PowerManager/test_PowerManager.c",
+    "sources": [
+      "src/Management/PowerManager/PowerManagerConfig.c"
+    ]
+  },
+  {
+    "name": "ResourceRegistry",
+    "localization": true,
+    "file": "test/Hardware/ResourceRegistry/test_ResourceRegistry.c",
+    "sources": []
+  },
+  {
+    "name": "Watchdog",
+    "localization": true,
+    "file": "test/Management/Watchdog/test_Watchdog.c",
+    "sources": [
+      "src/Management/Watchdog/WatchdogConfig.c"
+    ]
+  },
+  {
+    "name": "WatchdogWorker",
+    "file": "test/Management/Watchdog/test_WatchdogWorker.c",
+    "sources": [
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ]
+  },
+  {
+    "name": "SecurityManager",
+    "file": "test/Management/SecurityManager/test_SecurityManager.c",
+    "sources": [],
+    "localization": true
+  },
+  {
+    "name": "E2E_SystemPipeline",
+    "file": "test/Infrastructure/Integration/test_E2E_SystemPipeline.c",
+    "sources": []
+  },
+  {
+    "name": "InternalTemperatureSensor",
+    "file": "test/Hardware/InternalTemperatureSensor/test_InternalTemperatureSensor.c",
+    "sources": [],
+    "localization": true
+  },
+  {
+    "name": "RGBLEDColorEngine",
+    "file": "test/Hardware/RGBLED/test_RGBLEDColorEngine.c",
+    "sources": [
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c"
+    ]
+  },
+  {
+    "name": "RGBLEDAnimEngine",
+    "file": "test/Hardware/RGBLED/test_RGBLEDAnimEngine.c",
+    "sources": [
+      "src/Hardware/RGBLED/RGBLEDAnimEngine.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Hardware/LEDAnimations/RainbowFlowAnim.c",
+      "src/Hardware/LEDAnimations/LEDAnimationInstances.c",
+      "src/Hardware/LEDAnimations/BlinkRedAnim.c",
+      "src/Hardware/LEDAnimations/BlinkWhiteAnim.c",
+      "src/Hardware/LEDAnimations/BreathingGreenAnim.c",
+      "src/Hardware/LEDAnimations/BreathingRedAnim.c",
+      "src/Hardware/LEDAnimations/DoubleBlinkWhiteAnim.c",
+      "src/Hardware/LEDAnimations/FadeBlueAnim.c",
+      "src/Hardware/LEDAnimations/HeartbeatAnim.c",
+      "src/Hardware/LEDAnimations/PoliceStrobeAnim.c",
+      "src/Hardware/LEDAnimations/SolidBlueAnim.c",
+      "src/Hardware/LEDAnimations/SolidGreenAnim.c",
+      "src/Hardware/LEDAnimations/SolidRedAnim.c",
+      "src/Hardware/LEDAnimations/SolidWhiteAnim.c",
+      "src/Hardware/LEDAnimations/SOSRedAnim.c",
+      "src/Hardware/LEDAnimations/StrobeWhiteAnim.c",
+      "src/Hardware/LEDAnimations/LEDAnimationPatterns.c",
+      "src/Hardware/LEDAnimations/GenericPatternsAnim.c"
+    ]
+  },
+  {
+    "name": "PinManagerOwnership",
+    "file": "test/Hardware/PinManager/test_PinManagerOwnership.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "PinManager",
+    "file": "test/Hardware/PinManager/test_PinManager_Native.c",
+    "sources": [
+      "src/Hardware/PinManager/PinManager.c",
+      "src/Hardware/PinManager/PinManagerConfig.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "DeveloperMode",
+    "file": "test/Communication/DebugConsole/Core/test_DeveloperMode.c",
+    "sources": ["src/Communication/DebugConsole/Core/DeveloperMode.c", "test/Infrastructure/support/esp_console_split_argv.c"],
+    "generateRunner": true
+  },
+  {
+    "name": "DebugConsole",
+    "localization": true,
+    "file": "test/Communication/DebugConsole/test_DebugConsole.c",
+    "sources": [
+      "src/Communication/DebugConsole/Commands/DiagnosticCommands.c",
+      "src/Communication/DebugConsole/Commands/HardwareCommands.c",
+      "src/Communication/DebugConsole/Commands/NetworkCommands.c",
+      "src/Communication/DebugConsole/Commands/PerformanceCommands.c",
+      "src/Communication/DebugConsole/Commands/SystemCommands.c",
+      "src/Communication/DebugConsole/Core/CommandRegistry.c",
+      "src/Communication/DebugConsole/Core/DeveloperMode.c",
+      "test/Infrastructure/support/esp_console_split_argv.c",
+      "src/Communication/DebugConsole/Core/ConsoleEventPublisher.c",
+      "src/Communication/DebugConsole/Core/DashboardManager.c",
+      "src/Communication/DebugConsole/Core/FlashLogger.c",
+      "src/Communication/DebugConsole/Core/HistoryManager.c",
+      "src/Communication/DebugConsole/Core/InputParser.c",
+      "test/Infrastructure/support/debug_console_drivers.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "I2CTransfers",
+    "file": "test/Hardware/I2CManager/test_I2CTransfers.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "I2CLifecycleErrors",
+    "file": "test/Hardware/I2CManager/test_I2CLifecycleErrors.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "I2CManager",
+    "file": "test/Hardware/I2CManager/test_I2CManager.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "I2CManager_E2E",
+    "file": "test/Hardware/I2CManager/test_I2CManager_E2E.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "I2CConsole",
+    "file": "test/Hardware/I2CManager/test_I2CConsole.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "SerialMonitor",
+    "file": "test/Communication/SerialMonitor/test_SerialMonitor.c",
+    "sources": [
+      "src/Communication/SerialMonitor/SerialMonitorConfig.c",
+      "src/Communication/SerialMonitor/SerialMonitorConsoleCommands.c",
+      "src/Communication/SerialMonitor/SerialMonitorPerfTester.c",
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "EndpointAmbientTemp",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointAmbientTemp.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointAmbientTemp",
+      "-DtearDown=tearDown_EndpointAmbientTemp"
+    ]
+  },
+  {
+    "name": "EndpointCPUTemp",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointCPUTemp.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointCPUTemp",
+      "-DtearDown=tearDown_EndpointCPUTemp"
+    ]
+  },
+  {
+    "name": "EndpointFan",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointFan.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointFan",
+      "-DtearDown=tearDown_EndpointFan"
+    ]
+  },
+  {
+    "name": "EndpointGroups",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointGroups.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointGroups",
+      "-DtearDown=tearDown_EndpointGroups"
+    ]
+  },
+  {
+    "name": "EndpointInternalLED",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointInternalLED.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointInternalLED",
+      "-DtearDown=tearDown_EndpointInternalLED"
+    ]
+  },
+  {
+    "name": "EndpointOTA",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointOTA.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointOTA",
+      "-DtearDown=tearDown_EndpointOTA"
+    ]
+  },
+  {
+    "name": "EndpointRGBLED",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointRGBLED.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointRGBLED",
+      "-DtearDown=tearDown_EndpointRGBLED"
+    ]
+  },
+  {
+    "name": "EndpointTelemetry",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointTelemetry.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_EndpointTelemetry",
+      "-DtearDown=tearDown_EndpointTelemetry"
+    ]
+  },
+  {
+    "name": "SignalHandlerCore",
+    "file": "test/Communication/Zigbee/Handlers/test_SignalHandlerCore.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c"
+    ],
+    "generateRunner": false,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h",
+      "-DsetUp=setUp_SignalHandlerCore",
+      "-DtearDown=tearDown_SignalHandlerCore"
+    ]
+  },
+  {
+    "name": "Zigbee",
+    "file": "test/Communication/Zigbee/test_Zigbee.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/ZigbeeRadioBoundary.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ]
+  },
+  {
+    "name": "RotaryEncoderOLEDIntegration",
+    "file": "test/Controllers/UIController/test_RotaryEncoderOLEDIntegration.c",
+    "sources": [
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Controllers/UIController/UITranslation.c",
+      "src/Hardware/RGBLED/RGBZoneSelection.c",
+      "src/Hardware/LEDAnimations/RainbowFlowAnim.c",
+      "src/Controllers/MenuManager/MenuRangeEditor.c",
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "SystemController",
+    "file": "test/Controllers/SystemController/test_SystemController.c",
+    "sources": [
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c",
+      "src/Management/Watchdog/WatchdogWorker.c",
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "OLED",
+    "localization": true,
+    "file": "test/Hardware/OLED/test_OLED.c",
+    "sources": [
+      "src/Hardware/OLED/OLEDConfig.c",
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "PinManagerLegacy",
+    "file": "test/Hardware/PinManager/test_PinManager.c",
+    "sources": [
+      "src/Hardware/PinManager/PinManager.c",
+      "src/Hardware/PinManager/PinManagerConfig.c",
+      "src/Hardware/PinManager/PinManagerConsoleCommands.c"
+    ],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "InternalTemperatureSensorLegacy",
+    "file": "test/Hardware/InternalTemperatureSensor/test_InternalTemperatureSensorCompatibility.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "TemperatureSensor",
+    "file": "test/Hardware/InfraredTemperatureSensor/test_TemperatureSensorCompatibility.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "EventBus",
+    "file": "test/Core/EventBus/test_EventBus.c",
+    "sources": [
+      "src/Core/EventBus/EventBusConfig.c",
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "DiagnosticsManager",
+    "file": "test/Management/DiagnosticsManager/test_DiagnosticsManager.c",
+    "sources": [
+      "src/Management/DiagnosticsManager/DiagnosticsManagerConfig.c"
+    ],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "LEDTransition",
+    "file": "test/Hardware/LEDAnimations/test_LEDTransition.c",
+    "sources": [
+      "src/Hardware/LEDAnimations/LEDTransition.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "IServiceLifecycle",
+    "file": "test/Infrastructure/Integration/test_IServiceLifecycle.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "RotaryEncoderGesture",
+    "file": "test/Hardware/RotaryEncoder/test_RotaryEncoderGesture.c",
+    "sources": [],
+    "generateRunner": true
+  },
+  {
+    "name": "ZigbeeReporting",
+    "file": "test/Communication/Zigbee/test_ZigbeeReporting.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ]
+  },
+  {
+    "name": "ZigbeeReportCLI",
+    "file": "test/Communication/Zigbee/test_ZigbeeReportCLI.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ],
+    "localization": true
+  },
+  {
+    "name": "ClimateZigbeePlugin",
+    "file": "test/Communication/Zigbee/test_ClimateZigbeePlugin.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c",
+      "src/Core/EventBus/EventSubscriptions.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ]
+  },
+  {
+    "name": "SerialPort",
+    "file": "test/Communication/SerialMonitor/test_SerialPort.c",
+    "generateRunner": true
+  },
+  {
+    "name": "SerialBuffer",
+    "file": "test/Communication/SerialMonitor/test_SerialBuffer.c",
+    "generateRunner": true
+  },
+  {
+    "name": "RGBLEDMenu",
+    "file": "test/Hardware/RGBLED/test_RGBLEDMenu.c",
+    "sources": [
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Controllers/MenuManager/MenuPluginManager.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Hardware/RGBLED/RGBZoneSelection.c",
+      "src/Controllers/MenuManager/MenuRangeEditor.c",
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "SystemTelemetry",
+    "file": "test/Controllers/SystemController/test_SystemTelemetry.c",
+    "sources": [
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "ConsoleTransport",
+    "file": "test/Communication/DebugConsole/Drivers/test_ConsoleTransport.c",
+    "generateRunner": true
+  },
+  {
+    "name": "LEDAnimationInstances",
+    "file": "test/Hardware/LEDAnimations/test_LEDAnimationInstances.c",
+    "sources": [
+      "src/Hardware/LEDAnimations/LEDAnimationInstances.c",
+      "src/Hardware/LEDAnimations/BlinkRedAnim.c",
+      "src/Hardware/LEDAnimations/BlinkWhiteAnim.c",
+      "src/Hardware/LEDAnimations/BreathingGreenAnim.c",
+      "src/Hardware/LEDAnimations/BreathingRedAnim.c",
+      "src/Hardware/LEDAnimations/DoubleBlinkWhiteAnim.c",
+      "src/Hardware/LEDAnimations/FadeBlueAnim.c",
+      "src/Hardware/LEDAnimations/HeartbeatAnim.c",
+      "src/Hardware/LEDAnimations/PoliceStrobeAnim.c",
+      "src/Hardware/LEDAnimations/RainbowFlowAnim.c",
+      "src/Hardware/LEDAnimations/SolidBlueAnim.c",
+      "src/Hardware/LEDAnimations/SolidGreenAnim.c",
+      "src/Hardware/LEDAnimations/SolidRedAnim.c",
+      "src/Hardware/LEDAnimations/SolidWhiteAnim.c",
+      "src/Hardware/LEDAnimations/SOSRedAnim.c",
+      "src/Hardware/LEDAnimations/StrobeWhiteAnim.c",
+      "src/Hardware/LEDAnimations/LEDAnimationPatterns.c",
+      "src/Hardware/LEDAnimations/GenericPatternsAnim.c"
+    ]
+  },
+  {
+    "name": "ClimateConsoleCommands",
+    "file": "test/Controllers/ClimateController/test_ClimateConsoleCommands.c",
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "SystemZigbeePlugin",
+    "file": "test/Communication/Zigbee/test_SystemZigbeePlugin.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Core/EventBus/EventSubscriptions.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ]
+  },
+  {
+    "name": "DiagnosticCommands",
+    "file": "test/Communication/DebugConsole/Commands/test_DiagnosticCommands.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "ZigbeeRadioBoundary",
+    "file": "test/Communication/Zigbee/test_ZigbeeRadioBoundary.c",
+    "sources": [
+      "src/Communication/Zigbee/ZigbeeRadioBoundary.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "EndpointRegistration",
+    "file": "test/Communication/Zigbee/Endpoints/test_EndpointRegistration.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
+      "src/Hardware/RGBLED/RGBLEDColorEngine.c",
+      "src/Management/ConfigurationManager/SystemConfigs.c",
+      "src/Management/ConfigurationManager/ZigbeeReportingSettings.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ]
+  },
+  {
+    "name": "ConfigurationCommandsRegistration",
+    "file": "test/Management/ConfigurationManager/test_ConfigurationCommandsRegistration.c",
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "ResourceCommandsRegistration",
+    "localization": true,
+    "file": "test/Hardware/ResourceRegistry/test_ResourceCommandsRegistration.c",
+    "generateRunner": true
+  },
+  {
+    "name": "MemoryCommandsRegistration",
+    "file": "test/Core/MemoryManager/test_MemoryCommandsRegistration.c",
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "ModuleCommandsRegistration",
+    "file": "test/Core/SystemInitializer/test_ModuleCommandsRegistration.c",
+    "generateRunner": true,
+    "sources": [
+      "src/Core/ErrorHandler/ErrorHandlerConsoleCommands.c",
+      "src/Core/EventBus/EventBusConsoleCommands.c",
+      "src/Core/LogManager/LogManagerConsoleCommands.c",
+      "src/Core/PerformanceMonitor/PerformanceMonitorConsoleCommands.c",
+      "src/Core/ServiceLocator/ServiceLocatorConsoleCommands.c",
+      "src/Core/SystemInitializer/SystemInitializerConsoleCommands.c",
+      "src/Management/ApplicationManager/ApplicationManagerConsoleCommands.c",
+      "src/Management/Watchdog/WatchdogConsoleCommands.c",
+      "src/Management/SecurityManager/SecurityManagerConsoleCommands.c",
+      "src/Management/PowerManager/PowerManagerConsoleCommands.c",
+      "src/Controllers/SystemController/SystemControllerConsoleCommands.c",
+      "src/Controllers/MenuManager/MenuManagerConsoleCommands.c",
+      "src/Hardware/RGBLED/RGBLEDConsoleCommands.c",
+      "src/Hardware/PinManager/PinManagerConsoleCommands.c",
+      "src/Hardware/OLED/OLEDConsoleCommands.c",
+      "src/Hardware/I2CManager/I2CManagerConsoleCommands.c",
+      "src/Hardware/BuiltinLED/BuiltinLEDConsoleCommands.c",
+      "src/Hardware/InternalTemperatureSensor/InternalTemperatureSensorConsoleCommands.c",
+      "src/Controllers/UIController/UITranslation.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "PerformanceMonitor",
+    "file": "test/Core/PerformanceMonitor/test_PerformanceMonitor.c",
+    "generateRunner": true,
+    "sources": [
+      "src/Core/PerformanceMonitor/PerformanceMonitorConfig.c",
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "LogManager",
+    "file": "test/Core/LogManager/test_LogManager.c",
+    "generateRunner": true,
+    "sources": [
+      "src/Core/LogManager/LogManagerConfig.c"
+    ],
+    "localization": true
+  },
+  {
+    "name": "MemoryManager",
+    "file": "test/Core/MemoryManager/test_MemoryManager.c",
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "FlashLogger",
+    "file": "test/Communication/DebugConsole/Core/test_FlashLogger.c",
+    "sources": [
+      "src/Management/Watchdog/WatchdogWorker.c"
+    ],
+    "generateRunner": true
+  },
+  {
+    "name": "FactoryReset",
+    "file": "test/Management/ApplicationManager/test_FactoryReset.c",
+    "generateRunner": true
+  },
+  {
+    "name": "TemperatureSources",
+    "file": "test/Controllers/ClimateController/test_TemperatureSources.c",
+    "generateRunner": true
+  },
+  {
+    "name": "PinConsole",
+    "file": "test/Hardware/PinManager/test_PinConsole.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "OLEDConsole",
+    "file": "test/Hardware/OLED/test_OLEDConsole.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "EventBusConsole",
+    "file": "test/Core/EventBus/test_EventBusConsole.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "SystemInitializerConsole",
+    "file": "test/Core/SystemInitializer/test_SystemInitializerConsole.c",
+    "sources": [],
+    "generateRunner": true,
+    "localization": true
+  },
+  {
+    "name": "SystemZigbeeStartupGate",
+    "file": "test/Communication/Zigbee/test_SystemZigbeeStartupGate.c",
+    "sources": [
+      "test/Communication/Zigbee/test_zigbee_fakes.c",
+      "src/Core/EventBus/EventSubscriptions.c"
+    ],
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include",
+      "-include",
+      "test/Communication/Zigbee/test_zigbee_shared.h"
+    ]
+  },
+  {
+    "name": "ZigbeeReportTrace",
+    "file": "test/Communication/Zigbee/test_report_trace.c",
+    "generateRunner": true,
+    "flags": [
+      "-Imanaged_components/espressif__esp-zigbee-lib/include"
+    ]
+  },
+  {
+    "name": "MenuRangeEditor",
+    "file": "test/Controllers/MenuManager/test_MenuRangeEditor.c",
+    "generateRunner": true,
+    "sources": [
+      "src/Controllers/MenuManager/MenuRangeEditor.c"
+    ]
+  },
+  {
+    "name": "MenuEditSession",
+    "file": "test/Controllers/MenuManager/test_MenuEditSession.c",
+    "generateRunner": true,
+    "sources": [
+      "src/Controllers/MenuManager/MenuEditSession.c"
+    ]
+  }
+]

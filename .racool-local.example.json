@@ -1,0 +1,7 @@
+{
+  "zigbeeConfiguration": "<path-to-zigbee2mqtt>/configuration.yaml",
+  "mqttHost": "<reachable-mqtt-host>",
+  "mqttPort": 1883,
+  "deviceIEEE": null,
+  "liveConverter": "<path-to-zigbee2mqtt>/external_converters/racool.mjs"
+}

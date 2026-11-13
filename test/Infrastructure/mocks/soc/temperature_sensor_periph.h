@@ -1,0 +1,6 @@
+#ifndef RACOOL_MOCK_TEMPERATURE_SENSOR_PERIPH_H
+#define RACOOL_MOCK_TEMPERATURE_SENSOR_PERIPH_H
+#define TEMPERATURE_SENSOR_ATTR_RANGE_NUM 5
+typedef struct {int offset,reg_val,range_min,range_max,error_max;} temperature_sensor_attribute_t;
+extern const temperature_sensor_attribute_t temperature_sensor_attributes[TEMPERATURE_SENSOR_ATTR_RANGE_NUM];
+#endif

@@ -1,0 +1,330 @@
+[
+  {
+    "file": "test/Communication/Zigbee/test_live_recovery.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_reporting_interval_wire.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_recovery_decision.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_live_operation_completion.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_tasklet_watchdog.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_bind_pages.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_pool_events.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_product_version.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/UIController/test_led_startup_live.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_settings_card.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/DebugConsole/test_flash_capture.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/DebugConsole/test_developer_session.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/SerialMonitor/test_uart_lifecycle.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/RotaryEncoder/test_encoder_persistence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Management/ApplicationManager/test_factory_reset_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/RGBLED/test_rgb_brightness_evidence.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Controllers/ClimateController/test_climate_cpu.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/ClimateController/test_climate_stale.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/ClimateController/test_fan_mode_evidence.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_tx_profiles.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_tx_profile_evidence.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_bridge_error_scope.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_bridge_request.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Hardware/BuiltinLED/test_builtin_brightness_evidence.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_converter.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_live_read.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_mqtt_state_evidence.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Hardware/OLED/test_oled_fonts.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Management/PowerManager/test_power_profile_evidence.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_reporting_readback.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_reporting_traffic.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Infrastructure/test_target_results.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Infrastructure/test_test_case_inventory.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_verification_selection.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Hardware/BuiltinLED/test_builtin_brightness.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/BuiltinLED/test_builtin_playback.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/BuiltinLED/test_builtin_timing.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/ClimateController/test_climate_fields.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_firmware_config.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_hardware_diagnostics.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/MenuManager/test_led_menu.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/MenuManager/test_menu_registration.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_platformio_link.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Management/PowerManager/test_power_profiles.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_reporting_cli.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Management/SecurityManager/test_security_surface.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/SerialMonitor/test_serial_capture.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/SerialMonitor/test_serial_reconnect.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/UIController/test_ui_readiness.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_target_wrapper.ps1",
+    "runner": "powershell"
+  },
+  {
+    "file": "test/Infrastructure/test_readonly_health.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Core/SystemInitializer/test_startup_diagnostics_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_platformio_manifest.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_zigbee_lifecycle.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_test_layout.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Core/PerformanceMonitor/test_monitor_cli.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_reporting_changes.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_color_command.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Hardware/InternalTemperatureSensor/test_calibration_change.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/MenuManager/test_telemetry_menu.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/SerialMonitor/test_health_change.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/SerialMonitor/test_health_reporting_wrapper.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/RGBLED/test_zone_xy.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_zone_card.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Infrastructure/test_color_card.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Infrastructure/test_dashboard_generator.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Controllers/ClimateController/test_fan_sources_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_fan_source_wire.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Infrastructure/test_build_diagnostics.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Hardware/OLED/test_font_generation.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Core/Localization/test_catalog_generation.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Core/Localization/test_language_live.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/UIController/test_screen_compile_boundaries.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/UIController/test_oled_language_menu.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/SystemController/test_system_cli_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/MenuManager/test_menu_cli_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/InfraredTemperatureSensor/test_ir_cli_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_device_selection.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Management/ConfigurationManager/test_configuration_observability.mjs",
+    "runner": "node"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_startup_sentinel_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Hardware/OLED/test_frame_evidence.py",
+    "runner": "python"
+  },
+  {
+    "file": "test/Controllers/UIController/test_oled_gallery.py",
+    "runner": "python"
+  }
+]

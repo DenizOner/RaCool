@@ -1,0 +1,7 @@
+{
+    // PlatformIO owns the ESP-IDF configure/build environment and toolchain.
+    "cmake.configureOnOpen": false,
+    // CMake Tools does not discover PlatformIO's private package directory.
+    // Omitting .exe lets the same setting work on Windows and POSIX hosts.
+    "cmake.cmakePath": "${userHome}/.platformio/packages/tool-cmake/bin/cmake"
+}
