@@ -106,7 +106,8 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
 
 for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_only','retained_update',
     'restore_disconnect','post_restore_foreign','version_drift','missing_schema',
-    'retained_baseline','already_debug','invalid_cut_flags']) test(
+    'retained_baseline','already_debug','invalid_cut_flags',
+    'retained_recovery','stale_retained_foreign','retained_restore_child']) test(
     'bridge logging recovery after '+scenario+' MQTT disconnect', async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-log-recovery-'));
     const control='report_interval_radiator_s',property=control+'_climate';
@@ -135,11 +136,22 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
                 const n=body.readUInt16BE(2),topic=body.subarray(4,4+n).toString();
                 if(topic==='zigbee2mqtt/bridge/info') {
                     if(scenario==='post_restore_foreign' && connections>=4) level='warning';
-                    publish(socket,topic,bridgeInfo(),true);
-                    // Ordinary mock sessions have a genuinely live (non-retained)
-                    // baseline update. The negative case has only stale retained state.
-                    if(initial && scenario!=='retained_baseline')
-                        publish(socket,topic,bridgeInfo(),false);
+                    if((scenario==='stale_retained_foreign' && connections===2) ||
+                        (scenario==='retained_restore_child' && connections===3)) {
+                        // The real bridge changed externally, but the retained
+                        // broker snapshot still advertises our old 'debug'.
+                        level='warning';
+                        const stale={...bridgeInfo(),config:{advanced:{log_level:'debug'}}};
+                        publish(socket,topic,stale,true);
+                    } else {
+                        publish(socket,topic,bridgeInfo(),true);
+                        // Fresh non-retained updates are available on the
+                        // original connection and normal recovery read/write
+                        // children, but never on stale/retained-only fixtures.
+                        if((initial && scenario!=='retained_baseline') ||
+                            (!initial && connections<=3 && scenario!=='retained_recovery'))
+                            publish(socket,topic,bridgeInfo(),false);
+                    }
                 }
                 if(topic==='zigbee2mqtt/bridge/devices'){
                     publish(socket,topic,[device]);
@@ -227,9 +239,17 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
             ack_only:'delivery_unknown',retained_update:'delivery_unknown',
             restore_disconnect:'failed',post_restore_foreign:'failed',
             version_drift:'failed',missing_schema:undefined,
-            retained_baseline:undefined,already_debug:undefined,invalid_cut_flags:undefined
+            retained_baseline:undefined,already_debug:undefined,invalid_cut_flags:undefined,
+            retained_recovery:'snapshot_only',stale_retained_foreign:'snapshot_only',
+            retained_restore_child:'failed'
         }[scenario];
         assert.equal(result.bridgeLogRecovery?.status,expected,output);
+        if(['retained_recovery','stale_retained_foreign'].includes(scenario)) {
+            assert.equal(result.bridgeLogRecovery.before.retained,true,output);
+            assert.equal(result.bridgeLogRecovery.before.value,'debug',output);
+        }
+        if(scenario==='retained_restore_child')
+            assert.match(result.bridgeLogRecovery.error,/Recovery session failed/,output);
         if(['confirmed','controlled_cut'].includes(scenario)) {
             assert.equal(result.bridgeLogRecovery.verifiedLive,true,output);
             assert.equal(result.bridgeLogRecovery.after.value,'info',output);
@@ -244,7 +264,7 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
         assert.equal(level,
             scenario==='already_debug'?'debug':
             ['missing_schema','retained_baseline','invalid_cut_flags'].includes(scenario)?'info':
-            scenario==='foreign'||scenario==='post_restore_foreign'?'warning':
+            ['foreign','post_restore_foreign','stale_retained_foreign','retained_restore_child'].includes(scenario)?'warning':
             ['confirmed','controlled_cut','restore_disconnect'].includes(scenario)?'info':'debug');
     } finally{
         child?.kill();for(const socket of clients)socket.destroy();

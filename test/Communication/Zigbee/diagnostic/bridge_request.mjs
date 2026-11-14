@@ -9,7 +9,10 @@ export function bridgeRequest(events, publish, base, command, payload, timeoutMs
         const receive = (topic, response) => {
             if (topic !== responseTopic || response.transaction !== transaction) return;
             cleanup();
-            if (response.status !== 'ok') reject(Error(response.error ?? 'Bridge request failed'));
+            // Broker-provided error text is untrusted and may contain credentials,
+            // configuration or encoded backup data. Never propagate it into
+            // diagnostic console messages or persisted JSON artifacts.
+            if (response.status !== 'ok') reject(Error('Bridge request rejected; remote error details redacted'));
             else resolve({transaction, timestamp: Date.now(), data: response.data});
         };
         const timer = setTimeout(() => {cleanup(); reject(Error('Bridge request timeout: ' + command));}, timeoutMs);

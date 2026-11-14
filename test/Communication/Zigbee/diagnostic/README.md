@@ -25,15 +25,24 @@ sayılır. ACK tek başına uygulanma veya kalıcılık kanıtı değildir.
 MQTT bağlantısı kesilirse yalnız uygulandığı canlı güncellemeyle doğrulanan
 yardımcı değişikliği için ayrı bağlantıda kimlik/sürüm/retained snapshot kontrol
 edilir; farklı değer ya da teslim belirsizliği varsa otomatik yazılmaz.
+Kurtarma ebeveyninin okuması **retained-only** ise yazma başlatılmaz:
+`snapshot_only` / BLOCKED. Ayrı `set-bridge-log-level` çocuğu da
+kendi yeni bağlantısında retained olmayan güncel baseline görmeden
+`bridge/request/options` yazamaz. Eski retained `debug` gösterirken
+köprüde yabancı `warning` değeri bulunması veya child'ın başlangıç
+kanıtının eski olması negatif testle sıfır geri yazma olarak sınanır.
 Uygun durumda koşullu geri yazma için ayrıca yeni canlı bridge/info güncellemesi
 ve başka bağlantıda son snapshot gerekir; ancak o zaman restored raporlanır.
 Sadece retained snapshot 'snapshot_only', ACK-only/retained-only/delivery_unknown
 ise BLOCKED'dır. İkinci bağlantı kesintisi veya son okuma uyuşmazlığı başarısızdır.
-Başlangıç yalnız retained bridge/info ise **hiçbir global log mutasyonu yapılmadan BLOCKED**
-dönülür. Başka yöneticinin eşzamanlı değişikliği MQTT üzerinden atomik olarak kilitlenemez.
+Başlangıç veya kurtarma yeniden bağlantısı yalnız retained bridge/info sağlıyorsa
+**hiçbir yeni global log mutasyonu yapılmadan BLOCKED** dönülür. Başka yöneticinin eşzamanlı değişikliği MQTT üzerinden atomik olarak kilitlenemez.
 `bridge/response/#` RPC trafiği yalnız yardımcının gönderdiği transaction ile
 eşleşirse **komut + durum metadata'sı** kaydeder; backup dahil yabancı yanıt
 yükleri, Base64 yedekler ve hata metinleri log/JSON'a yazılmaz.
+Yardımcının kendi RPC isteğine ait `response.error` da güvenilmezdir:
+hata ayrıntısı yalnız sabit redaksiyon mesajıyla döner, konsola ve
+artefaktlara ham köprü hata metni aktarılmaz.
 Hiçbir kayıtta tam bridge/info config'i, sır veya ağ kimliği yayınlanmaz.
 Köprü genelinde compare-and-swap/atomik koruma yoktur; iki okuma arasında başka
 bir yönetici yazabilir ve mutlak kalıcılık kanıtlanamaz.

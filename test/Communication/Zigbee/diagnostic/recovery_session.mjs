@@ -88,10 +88,10 @@ export async function recoverBridgeLogLevel(journal,device) {
         return evidence;
     };
     const before=await read();
-    if(before.value===journal.baseline) {
-        // A retained broker snapshot alone cannot prove live restoration.
-        return {status:before.retained?'snapshot_only':'already_restored',before,artifacts};
-    }
+    // A retained response may be stale even if it matches our last write.
+    // It cannot authorize a new global mutation or prove already-restored.
+    if(before.retained!==false) return {status:'snapshot_only',before,artifacts};
+    if(before.value===journal.baseline) return {status:'already_restored',before,artifacts};
     if(before.value!==journal.confirmed) return {status:'foreign_change',before,artifacts};
     const {result,artifact}=await runChild('set-bridge-log-level',
         [journal.baseline,journal.confirmed],device.ieee_address);

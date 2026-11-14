@@ -184,6 +184,13 @@ events.on('message',(topic,value,retained)=>{
                     const desired=process.argv[3], expected=process.argv[4];
                     if(!permitted.includes(desired)||!permitted.includes(expected)||seen.logLevel!==expected)
                         throw Error('Foreign or invalid bridge log level');
+                    // The recovery parent cannot authorize a child write with
+                    // its own read: the child must prove a fresh baseline on
+                    // THIS connection, otherwise fail before bridge/options.
+                    if(seen.bridgeInfo?.retained!==false ||
+                        seen.bridgeInfo?.level!==expected ||
+                        seen.bridgeInfo?.version!==seen.info.version)
+                        throw Error('Fresh non-retained bridge/info baseline required for recovery write; no writes');
                     const sequence=seen.bridgeInfoSequence;
                     trackOperation(bridgeRequest(events,publish,base,'options',
                         {options:{advanced:{log_level:desired}}}).then(async reply=>{

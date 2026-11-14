@@ -14,9 +14,24 @@ test('bridge RPC ignores stale replies and correlates the exact topic and transa
 });
 test('bridge errors and timeouts reject and remove listeners',async()=>{
     const events=new EventEmitter();
+    const secret='FAKE_SECRET_BACKUP_CONTENT_MUST_NOT_APPEAR';
     await assert.rejects(bridgeRequest(events,(_,request)=>{
-        events.emit('message','base/bridge/response/read',{transaction:request.transaction,status:'error',error:'device unavailable'});
-    },'base','read',{}),/device unavailable/);
+        events.emit('message','base/bridge/response/read',{transaction:request.transaction,
+            status:'error',error:'device unavailable: '+secret,
+            data:{backup:secret}});
+    },'base','read',{}),error=>{
+        assert.match(error.message,/Bridge request rejected/);
+        assert.doesNotMatch(error.message,/FAKE_SECRET|device unavailable/);
+        assert.equal(Object.hasOwn(error,'data'),false);
+        return true;
+    });
+    await assert.rejects(bridgeRequest(events,(_,request)=>{
+        events.emit('message','base/bridge/response/read',
+            {transaction:request.transaction,status:'rejected',error:'another fake token'});
+    },'base','read',{}),error=>{
+        assert.equal(error.message,'Bridge request rejected; remote error details redacted');
+        return true;
+    });
     await assert.rejects(bridgeRequest(events,()=>{},'base','read',{},5),/timeout/);
     assert.equal(events.listenerCount('message'),0);
 });
