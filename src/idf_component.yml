@@ -1,6 +1,6 @@
 dependencies:
   esp-idf-lib/i2cdev: "2.1.1"
-  espressif/esp-zigbee-lib: "2.0.4"
+  espressif/esp-zigbee-lib: "2.0.5"
   espressif/esp-zboss-lib: "1.6.4"
   joltwallet/littlefs:
     version: "1.21.1"
