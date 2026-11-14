@@ -29,6 +29,8 @@ void setUp_DiagnosticsManager(void) {
   RESET_FAKE(mocked_vTaskDelay);
   RESET_FAKE(mocked_xTaskGetTickCount);
   RESET_FAKE(mocked_esp_timer_get_time);
+  RESET_FAKE(mocked_esp_get_free_heap_size);
+  RESET_FAKE(mocked_heap_caps_get_largest_free_block);
   RESET_FAKE(mocked_vTaskSuspend);
   mocked_xSemaphoreCreateMutexStatic_fake.return_val = (SemaphoreHandle_t)0x100;
   mocked_xSemaphoreTake_fake.return_val = pdTRUE;
@@ -354,6 +356,9 @@ static void ConfigureUnhealthyPeriodicZigbee(void) {
     readinessService.CheckHealth = Unhealthy;
     mocked_ServiceLocator_GetService_fake.return_val = &readinessService;
     mocked_xTaskGetTickCount_fake.custom_fake = ReadTicks;
+    /* A healthy heap must not be misclassified by default-zero test mocks. */
+    mocked_esp_get_free_heap_size_fake.return_val = UINT32_MAX;
+    mocked_heap_caps_get_largest_free_block_fake.return_val = UINT32_MAX;
     testTicks = 0;
 }
 
