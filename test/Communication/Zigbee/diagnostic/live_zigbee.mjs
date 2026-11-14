@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import {bridgeRequest} from './bridge_request.mjs';
 import {settleBeforeSnapshot} from './live_operation_completion.mjs';
 import {reportIntervalRequest,reportIntervalResponse,reportIntervalPair} from './reporting_interval_wire.mjs';
-import {recoverReportingInterval,recoverBridgeLogLevel} from './recovery_session.mjs';
+import {recoverReportingInterval,recoverBridgeLogLevel,bridgeLogLevels} from './recovery_session.mjs';
 import {selectVerificationExposes, selectReadExposes} from './verification_selection.mjs';
 import {MqttStateEvidence} from './mqtt_state_evidence.mjs';
 const stateEvidence = new MqttStateEvidence();
@@ -85,7 +85,21 @@ function trackOperation(operation) {
 events.on('ready',()=>{mqttPing=setInterval(()=>socket.write(Buffer.from([0xc0,0])),20000);subscribe(base+'/bridge/definitions');subscribe(base+'/bridge/info');subscribe(base+'/bridge/devices');subscribe(base+'/bridge/response/#');subscribe(base+'/bridge/logging');subscribe('homeassistant/#');timer=setTimeout(()=>socket.end(),longVerificationModes.includes(mode)?900000:(mode==='configure'||mode==='interview'||mode==='read'||mode==='read-ranges'||mode==='read-zone')?90000:15000);});
 events.on('message',(topic,value,retained)=>{
     if(topic===base+'/bridge/definitions') seen.actions=value.actions;
-    if(topic===base+'/bridge/info'){seen.logLevel=value.config?.advanced?.log_level;seen.info={version:value.version,commit:value.commit,frontendPort:value.config?.frontend?.port};console.log('BRIDGE',JSON.stringify(seen.info));}
+    if(topic===base+'/bridge/info'){
+        seen.logLevel=value.config?.advanced?.log_level;
+        seen.info={version:value.version,commit:value.commit,frontendPort:value.config?.frontend?.port};
+        const observed={sequence:(seen.bridgeInfoSequence??0)+1,level:seen.logLevel,
+            version:value.version,retained,raw:value};
+        seen.bridgeInfoSequence=observed.sequence;
+        seen.bridgeInfo=observed;
+        // Keep only minimal correlation evidence; never write bridge config/secrets.
+        seen.bridgeInfoEvents??=[];
+        seen.bridgeInfoEvents.push({sequence:observed.sequence,level:observed.level,
+            version:observed.version,retained:observed.retained});
+        if(seen.bridgeInfoEvents.length>24)seen.bridgeInfoEvents.shift();
+        events.emit('bridge_info',observed);
+        console.log('BRIDGE',JSON.stringify(seen.info));
+    }
     if(topic===base+'/bridge/devices') {
         let d;
         try { d = selectRaCoolDevice(value, deviceSelector); }
@@ -142,27 +156,35 @@ events.on('message',(topic,value,retained)=>{
         seen.device=d;
         if((mode==='read-bridge-log-level'||mode==='set-bridge-log-level') && !started) {
             started=true;
-            const permitted=['debug','info','warn','error'];
-            if(!permitted.includes(seen.logLevel)) {
-                seen.operationError='Missing current bridge log level';
-                process.exitCode=1;socket.end();
-            } else if(mode==='read-bridge-log-level') {
-                seen.bridgeLogLevel={value:seen.logLevel};
-                seen.completed=true;socket.end();
-            } else {
-                const desired=process.argv[3], expected=process.argv[4];
-                if(!permitted.includes(desired)||!permitted.includes(expected)||seen.logLevel!==expected) {
-                    seen.operationError='Foreign or invalid bridge log level';
-                    process.exitCode=1;socket.end();
+            try {
+                const permitted=bridgeLogLevels(seen.bridgeInfo?.raw);
+                if(typeof seen.info?.version!=='string' || !permitted.includes(seen.logLevel))
+                    throw Error('Missing validated bridge version/log baseline');
+                if(mode==='read-bridge-log-level') {
+                    // Retained bridge/info is a broker snapshot, not fresh
+                    // evidence that the live service applied a mutation.
+                    seen.bridgeLogLevel={value:seen.logLevel,retained:seen.bridgeInfo.retained,
+                        version:seen.info.version,allowedLevels:permitted};
+                    seen.completed=true;socket.end();
                 } else {
+                    const desired=process.argv[3], expected=process.argv[4];
+                    if(!permitted.includes(desired)||!permitted.includes(expected)||seen.logLevel!==expected)
+                        throw Error('Foreign or invalid bridge log level');
+                    const sequence=seen.bridgeInfoSequence;
                     trackOperation(bridgeRequest(events,publish,base,'options',
-                        {options:{advanced:{log_level:desired}}}).then(()=>{
-                        seen.bridgeLogLevel={value:desired,expected};
+                        {options:{advanced:{log_level:desired}}}).then(async reply=>{
+                        if(reply?.data?.restart_required===true)
+                            throw Error('Bridge restart required; no live restoration verification');
+                        await waitBridgeLogUpdate(sequence,desired,seen.info.version);
+                        seen.bridgeLogLevel={value:desired,expected,version:seen.info.version,
+                            verifiedLive:true};
                         seen.completed=true;
                     }).catch(error=>{
                         seen.operationError=error.message;process.exitCode=1;
                     }).finally(()=>socket.end()));
                 }
+            } catch(error) {
+                seen.operationError=error.message;process.exitCode=1;socket.end();
             }
             return; // Recovery child modes need no device-state subscription.
         }
@@ -257,19 +279,59 @@ async function readIntervalWire(control) {
     const reply=await bridgeRequest(events,publish,base,'action',reportIntervalRequest(seen.device,control),30000);
     return reportIntervalResponse(reply.data,seen.device,control);
 }
+function waitBridgeLogUpdate(afterSequence,level,version) {
+    return new Promise((resolve,reject)=>{
+        const acceptable=event=>event.sequence>afterSequence && !event.retained &&
+            event.level===level && event.version===version;
+        const prior=seen.bridgeInfoEvents?.find(acceptable);
+        if(prior){resolve(prior);return;}
+        let completed=false;
+        const done=(error,value)=>{
+            if(completed)return;
+            completed=true;clearTimeout(timer);
+            events.off('bridge_info',onInfo);
+            transportAbort.signal.removeEventListener('abort',onAbort);
+            if(error)reject(error);else resolve(value);
+        };
+        const onInfo=event=>{if(acceptable(event))done(null,event);};
+        const onAbort=()=>done(Error('Bridge transport closed before live info verification'));
+        const timer=setTimeout(()=>done(Error('No non-retained bridge/info change confirmed')),6000);
+        events.on('bridge_info',onInfo);
+        transportAbort.signal.addEventListener('abort',onAbort,{once:true});
+    });
+}
 function beginBridgeLogJournal(baseline) {
-    if(!['debug','info','warn','error'].includes(baseline)) throw Error('Missing bridge log baseline');
+    const permitted=bridgeLogLevels(seen.bridgeInfo?.raw);
+    if(!permitted.includes(baseline) || typeof seen.info?.version!=='string')
+        throw Error('Missing validated bridge log baseline/version');
     if(bridgeLogJournal) throw Error('Bridge log mutation already owned');
-    bridgeLogJournal={baseline,confirmed:baseline,uncertain:false};
+    bridgeLogJournal={baseline,confirmed:baseline,allowedLevels:permitted,
+        bridgeVersion:seen.info.version,requested:null,acknowledged:false,
+        verified:false,phase:'baseline_snapshot',uncertain:false};
 }
 async function applyBridgeLogLevel(level) {
-    if(!bridgeLogJournal || !['debug','info','warn','error'].includes(level))
-        throw Error('Invalid bridge log mutation');
-    if(bridgeLogJournal.confirmed===level && !bridgeLogJournal.uncertain) return;
-    if(socket.destroyed || !socket.writable) throw Error('Bridge connection closed before log restoration');
+    if(!bridgeLogJournal || !bridgeLogJournal.allowedLevels.includes(level))
+        throw Error('Invalid bridge log mutation for this live schema');
+    if(bridgeLogJournal.uncertain)
+        throw Error('Unknown bridge log delivery; no blind write');
+    if(bridgeLogJournal.confirmed===level) return;
+    if(socket.destroyed || !socket.writable) throw Error('Bridge connection closed before log change');
+    const sequence=seen.bridgeInfoSequence;
+    bridgeLogJournal.requested=level;
+    bridgeLogJournal.phase='requested';
+    bridgeLogJournal.acknowledged=false;
+    bridgeLogJournal.verified=false;
     bridgeLogJournal.uncertain=true;
-    await bridgeRequest(events,publish,base,'options',{options:{advanced:{log_level:level}}});
+    const reply=await bridgeRequest(events,publish,base,'options',
+        {options:{advanced:{log_level:level}}});
+    bridgeLogJournal.acknowledged=true;
+    bridgeLogJournal.phase='acknowledged';
+    if(reply?.data?.restart_required===true)
+        throw Error('Bridge log-level change requires restart');
+    await waitBridgeLogUpdate(sequence,level,bridgeLogJournal.bridgeVersion);
     bridgeLogJournal.confirmed=level;
+    bridgeLogJournal.verified=true;
+    bridgeLogJournal.phase='verified';
     bridgeLogJournal.uncertain=false;
 }
 async function runFanSourceChecks() {
