@@ -35,7 +35,7 @@ static atomic_bool sdk_locked, loop_entered, sdk_active, boundary_violation;
 static esp_zigbee_callback_t queued_sdk_callback;
 static void *queued_sdk_context;
 static atomic_uint sdk_post_calls;
-static atomic_uint deinit_calls, freed_devices;
+static atomic_uint deinit_calls, freed_devices, app_free_calls;
 static atomic_uint attribute_calls, transient_failures;
 static atomic_bool permanent_failure;
 static bool resources_owned;
@@ -58,7 +58,11 @@ esp_err_t TargetZigbee_Deinit(void) {
     if (!check_boundary(sdk_initializer == xTaskGetCurrentTaskHandle() &&
         !atomic_load(&sdk_locked) && atomic_load(&zigbeeService.mainloopExited) &&
         atomic_load(&zigbeeService.cleanupAllowed) && !atomic_load(&zigbeeService.sdkReaders) &&
-        atomic_load(&freed_devices) == atomic_load(&deinit_calls) + 1)) return ESP_FAIL;
+        zigbeeService.device != NULL && !atomic_load(&app_free_calls) &&
+        atomic_load(&freed_devices) == atomic_load(&deinit_calls))) return ESP_FAIL;
+    /* Model the SDK freeing its registered AF tree during deinit. The mock
+     * records ownership; real memory reclamation is hardware-only evidence. */
+    atomic_fetch_add(&freed_devices, 1);
     atomic_fetch_add(&deinit_calls, 1);
     atomic_store(&sdk_active, false);
     return ESP_OK;
@@ -112,11 +116,10 @@ ezb_err_t TargetZigbee_RegisterDevice(ezb_af_device_desc_t device) {
     return check_boundary(device != NULL) ? EZB_ERR_NONE : EZB_ERR_INV_ARG;
 }
 void TargetZigbee_FreeDevice(ezb_af_device_desc_t device) {
-    check_boundary(device != NULL && atomic_load(&sdk_active) &&
-                   atomic_load(&zigbeeService.mainloopExited) &&
-                   atomic_load(&zigbeeService.cleanupAllowed) &&
-                   !atomic_load(&zigbeeService.sdkReaders));
-    atomic_fetch_add(&freed_devices, 1);
+    (void)device;
+    /* Explicit application free would compete with SDK deinit ownership. */
+    atomic_fetch_add(&app_free_calls, 1);
+    atomic_store(&boundary_violation, true);
 }
 void TargetZigbee_RegisterActions(ezb_zcl_core_action_callback_t callback) { (void)callback; }
 ezb_err_t TargetZigbee_SetDeviceType(ezb_nwk_device_type_t type) { (void)type; return EZB_ERR_NONE; }
@@ -234,6 +237,7 @@ void target_zigbee_worker_verify_shutdown(void) {
     atomic_store(&sdk_locked, false);
     atomic_store(&deinit_calls, 0);
     atomic_store(&freed_devices, 0);
+    atomic_store(&app_free_calls, 0);
     atomic_store(&sdk_post_calls, 0);
     queued_sdk_callback = NULL; queued_sdk_context = NULL;
     IZigbee *radio = Zigbee_Create();
@@ -323,6 +327,8 @@ void target_zigbee_worker_verify_shutdown(void) {
     TEST_ASSERT_NULL(zigbeeService.workerTask);
     TEST_ASSERT_EQUAL(1, atomic_load(&deinit_calls));
     TEST_ASSERT_EQUAL(1, atomic_load(&freed_devices));
+    TEST_ASSERT_EQUAL(0, atomic_load(&app_free_calls));
+    TEST_ASSERT_NULL(zigbeeService.device);
     atomic_store(&loop_entered, false);
     TEST_ASSERT_EQUAL(0, radio->base.Start(&radio->base));
     for (unsigned i = 0; i < 100 && !atomic_load(&loop_entered); ++i) vTaskDelay(1);
@@ -331,5 +337,7 @@ void target_zigbee_worker_verify_shutdown(void) {
     TEST_ASSERT_EQUAL(0, radio->base.Stop(&radio->base));
     TEST_ASSERT_EQUAL(2, atomic_load(&deinit_calls));
     TEST_ASSERT_EQUAL(2, atomic_load(&freed_devices));
+    TEST_ASSERT_EQUAL(0, atomic_load(&app_free_calls));
+    TEST_ASSERT_NULL(zigbeeService.device);
     TEST_ASSERT_FALSE(atomic_load(&boundary_violation));
 }
