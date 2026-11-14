@@ -11,7 +11,11 @@ async function runChild(mode,args,identity) {
     const id=randomBytes(16).toString('hex');
     const artifact=path.join('test','build',`zigbee-live-${mode}-${id}.json`);
     const env={...process.env,RACOOL_DEVICE_IEEE:identity,RACOOL_RESULT_ID:id};
-    delete env.RACOOL_READ_EXPECTED;
+    // A recovery child never inherits test-only socket-cut or observation
+    // flags from its parent: only the original test client may disconnect.
+    for(const name of ['RACOOL_READ_EXPECTED','RACOOL_TEST_CUT_CLIENT_AFTER_WIRE',
+        'RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG','RACOOL_REPORT_TRAFFIC',
+        'RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE']) delete env[name];
     const child=spawn(process.execPath,[helper,mode,...args],{env,stdio:'ignore',windowsHide:true});
     const code=await new Promise((resolve,reject)=>{
         const timer=setTimeout(()=>{child.kill();reject(Error('Recovery session timed out; delivery may be unknown'));},45000);

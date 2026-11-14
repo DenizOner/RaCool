@@ -50,6 +50,9 @@ function scalar(key) {
     return raw;
 }
 const base = scalar('base_topic') ?? 'zigbee2mqtt';
+// Retain only the routing key of requests sent by this helper, never the
+// response payload (backup responses can contain encoded network secrets).
+const ownedBridgeResponses = new Map();
 function str(value) {const body=Buffer.from(value);const size=Buffer.alloc(2);size.writeUInt16BE(body.length);return Buffer.concat([size,body]);}
 function packet(header, body) {let n=body.length;const size=[];do {let x=n%128;n=Math.floor(n/128);if(n)x|=128;size.push(x);}while(n);return Buffer.concat([Buffer.from([header,...size]),body]);}
 const events = new EventEmitter();
@@ -59,6 +62,9 @@ let buffer=Buffer.alloc(0), id=1;
 function publish(topic, value) {
     if (socket.destroyed || !socket.writable) throw Error('MQTT connection closed; delivery may be unknown');
     socket.write(packet(0x30,Buffer.concat([str(topic),Buffer.from(JSON.stringify(value))])));
+    const prefix=base+'/bridge/request/';
+    if(topic.startsWith(prefix) && typeof value?.transaction==='string')
+        ownedBridgeResponses.set(value.transaction,topic.slice(prefix.length));
 }
 function subscribe(topic) {const identifier=Buffer.alloc(2);identifier.writeUInt16BE(id++);socket.write(packet(0x82,Buffer.concat([identifier,str(topic),Buffer.from([0])])));}
 let timer, mqttPing;
@@ -66,6 +72,10 @@ socket.on('connect',()=>{let flags=2;const fields=[str('racool-audit-'+Date.now(
 socket.on('error',error=>{console.error('MQTT connection:',error.code);process.exitCode=1;});
 socket.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>1){let length=0,multiplier=1,offset=1,byte;do{if(offset>=buffer.length)return;byte=buffer[offset++];length+=(byte&127)*multiplier;multiplier*=128;}while(byte&128);if(buffer.length<offset+length)return;const type=buffer[0]>>4,flags=buffer[0];const body=buffer.subarray(offset,offset+length);buffer=buffer.subarray(offset+length);if(type===2){if(body[1]){console.error('MQTT authentication rejected:',body[1]);socket.end();process.exitCode=1;return;}events.emit('ready');}else if(type===3){const size=body.readUInt16BE();const topic=body.subarray(2,2+size).toString();let begin=2+size;if((flags>>1&3)>0){const ack=body.subarray(begin,begin+2);begin+=2;socket.write(packet(0x40,ack));}try{events.emit('message',topic,JSON.parse(body.subarray(begin).toString()),!!(flags&1));}catch(error){if(error instanceof SyntaxError)continue;throw error;}}}});
 const mode=process.argv[2]??'inspect';
+const cutAfterWire=process.env.RACOOL_TEST_CUT_CLIENT_AFTER_WIRE==='1';
+const cutAfterBridgeLog=process.env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG==='1';
+if((cutAfterWire||cutAfterBridgeLog) && mode!=='verify')
+    throw Error('Controlled client disconnect requires verify mode; no test was run');
 const longVerificationModes = ['verify', 'verify-color', 'read-color', 'verify-zone', 'verify-fan', 'read-fan-sources', 'verify-fan-sources', 'observe-fan-sources', 'read-interval-wire'];
 if(mode==='inspect')console.log('CONVERTER_FILES',JSON.stringify(fs.readdirSync(path.dirname(liveConverter))));
 const seen={};
@@ -233,7 +243,21 @@ events.on('message',(topic,value,retained)=>{
             if(evidence) {seen.command.evidence=evidence;seen.command.actual=evidence.actual;socket.end();}
         }
         if([...longVerificationModes,'read','read-ranges','read-zone'].includes(mode)&&!started){started=true;trackOperation((['read-fan-sources','verify-fan-sources','observe-fan-sources'].includes(mode) ? runFanSourceChecks() : mode==='verify-fan' ? runFanChecks() : mode==='read-zone' ? runZoneRead() : mode==='read-ranges' ? runRangeRead() : mode==='verify-zone' ? runZoneChecks() : mode==='read-color'||mode==='verify-color' ? runColorChecks() : runChecks()).catch(e=>{seen.operationError=e.message;seen.completed=false;console.error('VERIFY_FAILED',e.message);process.exitCode=1;}).finally(()=>socket.end()));}}
-    if(topic.includes('/bridge/response/')){console.log('RESPONSE',JSON.stringify(value));seen.responses??=[];seen.responses.push({topic,...value});if(value.status==='error')process.exitCode=1;}
+    if(topic.startsWith(base+'/bridge/response/')) {
+        // The wildcard subscription is needed by correlated bridgeRequest RPCs,
+        // but unrelated responses (notably Base64 backup archives) are private.
+        // Do not log or serialize their data, errors, IDs or arbitrary topics.
+        const transaction=value?.transaction;
+        const expected=typeof transaction==='string'?ownedBridgeResponses.get(transaction):undefined;
+        if(expected!==undefined && topic===base+'/bridge/response/'+expected) {
+            ownedBridgeResponses.delete(transaction);
+            const status=value?.status==='ok'?'ok':value?.status==='error'?'error':'unknown';
+            const summary={command:expected,status};
+            console.log('BRIDGE_RESPONSE',JSON.stringify(summary));
+            seen.responses??=[];seen.responses.push(summary);
+            if(status==='error')process.exitCode=1;
+        }
+    }
     if(topic.endsWith('/bridge/logging') && value.level==='error'){
         if(isUnrelatedDeviceRouteError(value.message,seen.device)){
             console.log('UNRELATED_DEVICE_ERROR',value.message);
@@ -308,6 +332,9 @@ function beginBridgeLogJournal(baseline) {
     const permitted=bridgeLogLevels(seen.bridgeInfo);
     if(!permitted.includes(baseline) || typeof seen.info?.version!=='string')
         throw Error('Missing validated bridge log baseline/version');
+    if(seen.bridgeInfo?.retained!==false || seen.bridgeInfo?.level!==baseline ||
+        seen.bridgeInfo?.version!==seen.info.version)
+        throw Error('Fresh non-retained bridge/info baseline required; retained-only snapshot cannot authorize global bridge log writes');
     if(bridgeLogJournal) throw Error('Bridge log mutation already owned');
     bridgeLogJournal={baseline,confirmed:baseline,allowedLevels:permitted,
         bridgeVersion:seen.info.version,requested:null,acknowledged:false,
@@ -579,6 +606,18 @@ async function runChecks() {
     const controls = (mode === "read" ? selectReadExposes : selectVerificationExposes)(seen.device.definition.exposes, process.argv.slice(3));
     if (!controls.length) throw Error("No controls selected for verification");
     const observeChanges = process.env.RACOOL_REPORT_CHANGES === '1';
+    const observeTraffic = process.env.RACOOL_REPORT_TRAFFIC === '1';
+    const reconfigure = process.env.RACOOL_REPORT_RECONFIGURE === '1';
+    if(cutAfterWire && cutAfterBridgeLog)
+        throw Error('Choose only one controlled client disconnect phase; no writes');
+    const singleInterval=controls.length===1 &&
+        /^report_interval_(radiator|ambient|processor|health|memory|uptime)_s$/.test(controls[0].name);
+    if(cutAfterWire && (!singleInterval || observeTraffic || observeChanges || reconfigure))
+        throw Error('Wire client disconnect requires one reporting interval without traffic, changes or reconfigure; no writes');
+    if(cutAfterBridgeLog && (!singleInterval || !observeTraffic || observeChanges || reconfigure))
+        throw Error('Bridge log client disconnect requires one reporting interval and traffic only; no writes');
+    if(cutAfterBridgeLog && seen.logLevel==='debug')
+        throw Error('Bridge log client disconnect cannot run: baseline is already debug; no controlled change or writes');
     if (observeChanges && (mode !== 'verify' || process.env.RACOOL_REPORT_TRAFFIC !== '1'))
         throw Error('Controlled report changes require verify mode and traffic observation');
     const changePlans = observeChanges ? buildReportingChangePlan(seen.device.definition.exposes, controls) : [];
@@ -610,7 +649,6 @@ async function runChecks() {
         console.log('READ_CONTROLS', JSON.stringify(seen.initialReads));
         return;
     }
-    const observeTraffic = process.env.RACOOL_REPORT_TRAFFIC === '1';
     const originalLogLevel = seen.logLevel;
     if (observeTraffic) seen.reportingOriginalLogLevel = originalLogLevel;
     if (observeTraffic) beginBridgeLogJournal(originalLogLevel);
@@ -739,6 +777,8 @@ async function runChecks() {
         clearInterval(ping);
         if (observeTraffic) await applyBridgeLogLevel(originalLogLevel);
     }
+    if((cutAfterWire||cutAfterBridgeLog) && !seen.testClientDisconnect)
+        throw Error('Requested controlled client disconnect never occurred; refusing normal PASS');
     seen.completed=true;
 }
 

@@ -17,7 +17,7 @@ ve özellik eşleşmesi doğrulanır; ZCL ile doğrulanmış yardımcı
 değeri aynı IEEE cihazına yeni bağlantı, taze korelasyonlu ZCL okuma ve tek
 geri yazma/son okuma ile koşullu geri yüklenir. Belirsiz teslim veya yabancı
 değer otomatik yazılmaz. Köprü log seviyesini geçici olarak debug'a alan verify/verify-fan/observe-fan-sources
-koşuları mevcut bridge/info değeri, sürümü ve config_schema içindeki gerçek
+koşuları **retained olmayan taze** bridge/info başlangıç değeri, sürümü ve config_schema içindeki gerçek
 log_level enum sözleşmesini doğrular; desteklenmeyen eski 'warn' adı tahminle
 'warning' olarak çevrilmez. İstek requested, bridge/options yanıtı acknowledged,
 yalnız isteğin sonrasındaki retained olmayan bridge/info güncellemesi verified
@@ -29,6 +29,11 @@ Uygun durumda koşullu geri yazma için ayrıca yeni canlı bridge/info güncell
 ve başka bağlantıda son snapshot gerekir; ancak o zaman restored raporlanır.
 Sadece retained snapshot 'snapshot_only', ACK-only/retained-only/delivery_unknown
 ise BLOCKED'dır. İkinci bağlantı kesintisi veya son okuma uyuşmazlığı başarısızdır.
+Başlangıç yalnız retained bridge/info ise **hiçbir global log mutasyonu yapılmadan BLOCKED**
+dönülür. Başka yöneticinin eşzamanlı değişikliği MQTT üzerinden atomik olarak kilitlenemez.
+`bridge/response/#` RPC trafiği yalnız yardımcının gönderdiği transaction ile
+eşleşirse **komut + durum metadata'sı** kaydeder; backup dahil yabancı yanıt
+yükleri, Base64 yedekler ve hata metinleri log/JSON'a yazılmaz.
 Hiçbir kayıtta tam bridge/info config'i, sır veya ağ kimliği yayınlanmaz.
 Köprü genelinde compare-and-swap/atomik koruma yoktur; iki okuma arasında başka
 bir yönetici yazabilir ve mutlak kalıcılık kanıtlanamaz.
@@ -61,7 +66,7 @@ kimlikleri ve ham MQTT frame'leri açık kayda alınmaz.
 
 
 Ayrı, daha riskli **global köprü log seviyesi** kopma gözlemi için, önceden
-doğrulanmış canlı `bridge/info.config_schema` ve mevcut `info` benzeri baseline
+doğrulanmış canlı `bridge/info.config_schema` ve **retained olmayan taze `info` benzeri baseline**
 şartlarıyla, tek `verify`/tek rapor kontrolünde `RACOOL_REPORT_TRAFFIC=1` ve
 `RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG=1` kullanımı sadece istek ACK ve
 istekten sonraki **retained olmayan** gerçek `bridge/info` değer/sürüm
@@ -73,7 +78,11 @@ bridge/broker resetlenmez. Ancak `bridge/options` **global** ayardır ve
 karşılaştırma-yazma atomik değildir: yabancı yazıcı/unknown/ikinci kopmada
 otomatik tekrar SET yapılmaz, **BLOCKED** kaydedilir ve operatör son durumu
 güvenli yöntemle okur. Mutasyon öncesi baseline ve son durum doğrulanamıyorsa
-bayrağı **çalıştırmayın**. Bu simülasyonun PASS sonucu canlı köprü kabulü değildir.
+bayrağı **çalıştırmayın**. Kontrollü kopma bayrakları yalnız `verify`/tek
+report-interval kontrolünde ve uyumlu koşullarda kabul edilir; `debug` başlangıç
+seviyesi veya çakışan bayraklar **mutasyon öncesi FAIL** oluşturur. Kesme istenip
+gerçekleşmezse normal verify **PASS** veremez. Bu simülasyonun PASS sonucu
+canlı köprü kabulü değildir.
 
 `RACOOL_ZIGBEE_REPORT_DIAGNOSTIC=ON`, yalnız geçici firmware'e
 `report_trace.c` dosyasını ve on linker wrapper'ını ekler. Varsayılan OFF'tur.

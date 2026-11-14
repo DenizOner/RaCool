@@ -42,7 +42,10 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
             if(type===8){const n=body.readUInt16BE(2),topic=body.subarray(4,4+n).toString();
                 if(topic==='zigbee2mqtt/bridge/devices'){
                     const listed=scenario==='identity'&&!initial?{...device,ieee_address:'0x0000000000000124'}:device;
-                    publish(socket,topic,[listed]);publish(socket,'zigbee2mqtt/fixture',{[property]:value});}}
+                    publish(socket,topic,[listed]);publish(socket,'zigbee2mqtt/fixture',{[property]:value});
+                    // Unrelated backup replies may contain Zigbee configuration/secrets.
+                    publish(socket,'zigbee2mqtt/bridge/response/backup',
+                        {status:'ok',data:{zip:'FAKE_SECRET_BACKUP_ARCHIVE_MUST_NOT_LEAK'}});}}
             if(type===3){const n=body.readUInt16BE(),topic=body.subarray(2,2+n).toString(),payload=JSON.parse(body.subarray(2+n).toString());
                 if(topic.endsWith('/get'))publish(socket,'zigbee2mqtt/fixture',{[property]:value});
                 if(topic.endsWith('/set')){writes.push(payload[property]);value=payload[property];if(initial&&scenario==='uncertain')socket.destroy();}
@@ -80,7 +83,10 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
         const exit=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.kill();reject(Error('Recovery test timed out'));},40000);
             child.on('error',reject);child.on('close',code=>{clearTimeout(timer);resolve(code);});});
         assert.equal(exit,1,output);
+        assert.doesNotMatch(output,/FAKE_SECRET_BACKUP_ARCHIVE_MUST_NOT_LEAK/);
         const result=JSON.parse(await fs.readFile(path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
+        assert.doesNotMatch(JSON.stringify(result),/FAKE_SECRET_BACKUP_ARCHIVE_MUST_NOT_LEAK/);
+        assert.equal(result.responses?.some(response=>Object.hasOwn(response,'data')),false);
         assert.equal(result.completed,false);assert.equal(result.transportClosedBeforeCompletion,true);
         assert.equal(result.recovery?.status,{confirmed:'restored',controlled_cut:'restored',foreign:'foreign_change',
             uncertain:'delivery_unknown',identity:'failed',reconfigure:undefined}[scenario],output);
@@ -99,14 +105,15 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
 
 
 for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_only','retained_update',
-    'restore_disconnect','post_restore_foreign','version_drift','missing_schema']) test(
+    'restore_disconnect','post_restore_foreign','version_drift','missing_schema',
+    'retained_baseline','already_debug','invalid_cut_flags']) test(
     'bridge logging recovery after '+scenario+' MQTT disconnect', async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-log-recovery-'));
     const control='report_interval_radiator_s',property=control+'_climate';
     const device={friendly_name:'fixture',ieee_address:'0x0000000000000123',
         network_address:123,model_id:'RaCool-ESP32C6',definition:{exposes:[{
             name:control,property,type:'numeric',access:7,value_min:0,value_max:600,value_step:1}]}};
-    let level='info',value=3,first=true,connections=0;
+    let level=scenario==='already_debug'?'debug':'info',value=3,first=true,connections=0;
     const schema={properties:{advanced:{properties:{log_level:{
         enum:['debug','info','warning','error']}}}}};
     const bridgeInfo=()=>({version:scenario==='version_drift'&&connections>1?'2.1.0':'2.0.0',
@@ -129,6 +136,10 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
                 if(topic==='zigbee2mqtt/bridge/info') {
                     if(scenario==='post_restore_foreign' && connections>=4) level='warning';
                     publish(socket,topic,bridgeInfo(),true);
+                    // Ordinary mock sessions have a genuinely live (non-retained)
+                    // baseline update. The negative case has only stale retained state.
+                    if(initial && scenario!=='retained_baseline')
+                        publish(socket,topic,bridgeInfo(),false);
                 }
                 if(topic==='zigbee2mqtt/bridge/devices'){
                     publish(socket,topic,[device]);
@@ -182,7 +193,9 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
         for(const key of ['RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE',
             'RACOOL_RESULT_ID','RACOOL_TEST_CUT_CLIENT_AFTER_WIRE',
             'RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG'])delete env[key];
-        if(scenario==='controlled_cut')env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG='1';
+        if(['controlled_cut','already_debug','retained_baseline','invalid_cut_flags'].includes(scenario))
+            env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG='1';
+        if(scenario==='invalid_cut_flags')env.RACOOL_TEST_CUT_CLIENT_AFTER_WIRE='1';
         child=spawn(process.execPath,[helper,'verify',control],{cwd:directory,env});
         let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);
         const exit=await new Promise((resolve,reject)=>{
@@ -194,10 +207,17 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
         const result=JSON.parse(await fs.readFile(
             path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
         assert.equal(result.completed,false,output);
-        if(scenario==='missing_schema') {
-            // Reject before even starting an asynchronous MQTT mutation.
-            assert.match(result.operationError,/Missing authoritative bridge log-level schema/);
+        if(['missing_schema','retained_baseline','already_debug','invalid_cut_flags'].includes(scenario)) {
+            // Reject before any global write; a retained-only snapshot is not fresh.
+            const expectedMessage={
+                missing_schema:/Missing authoritative bridge log-level schema/,
+                retained_baseline:/Fresh non-retained bridge\/info baseline required/,
+                already_debug:/baseline is already debug/,
+                invalid_cut_flags:/Choose only one controlled client disconnect phase/
+            }[scenario];
+            assert.match(result.operationError,expectedMessage,output);
             assert.equal(result.transportClosedBeforeCompletion,undefined,output);
+            assert.equal(result.testClientDisconnect,undefined,output);
         } else {
             assert.equal(result.transportClosedBeforeCompletion,true,output);
         }
@@ -206,7 +226,8 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
             foreign:'foreign_change',uncertain:'delivery_unknown',
             ack_only:'delivery_unknown',retained_update:'delivery_unknown',
             restore_disconnect:'failed',post_restore_foreign:'failed',
-            version_drift:'failed',missing_schema:undefined
+            version_drift:'failed',missing_schema:undefined,
+            retained_baseline:undefined,already_debug:undefined,invalid_cut_flags:undefined
         }[scenario];
         assert.equal(result.bridgeLogRecovery?.status,expected,output);
         if(['confirmed','controlled_cut'].includes(scenario)) {
@@ -217,11 +238,12 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
         if(scenario==='controlled_cut')
             assert.equal(result.testClientDisconnect?.phase,'verified_live_bridge_info',output);
         assert.deepEqual(writes,
-            scenario==='missing_schema'?[]:
+            ['missing_schema','retained_baseline','already_debug','invalid_cut_flags'].includes(scenario)?[]:
             ['confirmed','controlled_cut','restore_disconnect','post_restore_foreign'].includes(scenario)
                 ?['debug','info']:['debug']);
         assert.equal(level,
-            scenario==='missing_schema'?'info':
+            scenario==='already_debug'?'debug':
+            ['missing_schema','retained_baseline','invalid_cut_flags'].includes(scenario)?'info':
             scenario==='foreign'||scenario==='post_restore_foreign'?'warning':
             ['confirmed','controlled_cut','restore_disconnect'].includes(scenario)?'info':'debug');
     } finally{
