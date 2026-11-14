@@ -345,7 +345,11 @@ async function applyBridgeLogLevel(level) {
         level!==bridgeLogJournal.baseline) {
         seen.testClientDisconnect={phase:'verified_live_bridge_info'};
         console.log('TEST_CLIENT_DISCONNECT_AFTER_VERIFIED_BRIDGE_INFO');
+        /* Keep the tracked operation pending until the socket really closes:
+         * otherwise the close handler may miss the recovery-required race. */
+        const closed = new Promise(resolve=>socket.once('close',resolve));
         socket.destroy();
+        await closed;
         throw Error('Test-only client disconnect after verified bridge log mutation');
     }
 }
@@ -512,7 +516,10 @@ async function setAndRead(exp,value) {
             value!==recoveryJournal.baseline) {
             seen.testClientDisconnect={phase:'verified_wire',control:exp.name};
             console.log('TEST_CLIENT_DISCONNECT_AFTER_VERIFIED_WIRE',exp.name);
+            /* The close handler must observe an active, unfinished operation. */
+            const closed = new Promise(resolve=>socket.once('close',resolve));
             socket.destroy();
+            await closed;
             throw Error('Test-only client disconnect after confirmed wire mutation');
         }
     }
