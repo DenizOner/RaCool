@@ -877,21 +877,18 @@ startup_done:
     while (!atomic_load(&zigbeeService.cleanupAllowed) || atomic_load(&zigbeeService.sdkReaders))
       vTaskDelay(1);
     esp_err_t cleanup = ESP_OK;
-    /* AF descriptor cleanup traverses SDK-owned endpoint/cluster metadata.
-     * Release it while the SDK core still exists, after the mainloop has exited
-     * and every external SDK reader has drained. A free after SDK deinit can
-     * dereference already-torn-down AF structures. */
-    if (zigbeeService.device) {
-      ezb_af_free_device_desc(zigbeeService.device);
-      zigbeeService.device = NULL;
-    }
     if (zigbeeService.sdkInitialized) {
-        ZigbeeRadioBoundary_Begin();
+      /* The SDK's ezb_core_deinit -> af_desc_deinit releases the registered
+       * AF device/endpoint tree. An additional ezb_af_free_device_desc call
+       * (before or after deinit) double-frees or dereferences this tree.
+       * Wait for mainloop exit and SDK reader drain before SDK deinit. */
+      ZigbeeRadioBoundary_Begin();
       cleanup = esp_zigbee_deinit();
-        if (cleanup == ESP_OK) cleanup = ZigbeeRadioBoundary_Result();
-        if (cleanup != ESP_OK) ESP_LOGE(TAG, "SDK owner deinit failed: %s", esp_err_to_name(cleanup));
-      /* The SDK tears down its core/lock even if platform cleanup fails.
-       * Never call deinit a second time after a partial platform failure. */
+      /* Invalidate the borrowed handle even on a partial SDK teardown:
+       * retrying deinit or dereferencing it would be unsafe. */
+      zigbeeService.device = NULL;
+      if (cleanup == ESP_OK) cleanup = ZigbeeRadioBoundary_Result();
+      if (cleanup != ESP_OK) ESP_LOGE(TAG, "SDK owner deinit failed: %s", esp_err_to_name(cleanup));
       zigbeeService.sdkInitialized = false;
     }
     if (cleanup == ESP_OK) Zigbee_ConsoleSdkStopped();
