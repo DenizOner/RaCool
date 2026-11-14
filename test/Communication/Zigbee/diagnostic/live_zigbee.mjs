@@ -88,8 +88,12 @@ events.on('message',(topic,value,retained)=>{
     if(topic===base+'/bridge/info'){
         seen.logLevel=value.config?.advanced?.log_level;
         seen.info={version:value.version,commit:value.commit,frontendPort:value.config?.frontend?.port};
+        let allowedLevels=null;
+        try {allowedLevels=bridgeLogLevels(value);} catch {}
+        // Never retain the full bridge/info payload: config and credentials
+        // must not be serialized into diagnostic artifacts.
         const observed={sequence:(seen.bridgeInfoSequence??0)+1,level:seen.logLevel,
-            version:value.version,retained,raw:value};
+            version:value.version,retained,allowedLevels};
         seen.bridgeInfoSequence=observed.sequence;
         seen.bridgeInfo=observed;
         // Keep only minimal correlation evidence; never write bridge config/secrets.
@@ -157,7 +161,7 @@ events.on('message',(topic,value,retained)=>{
         if((mode==='read-bridge-log-level'||mode==='set-bridge-log-level') && !started) {
             started=true;
             try {
-                const permitted=bridgeLogLevels(seen.bridgeInfo?.raw);
+                const permitted=bridgeLogLevels(seen.bridgeInfo);
                 if(typeof seen.info?.version!=='string' || !permitted.includes(seen.logLevel))
                     throw Error('Missing validated bridge version/log baseline');
                 if(mode==='read-bridge-log-level') {
@@ -301,7 +305,7 @@ function waitBridgeLogUpdate(afterSequence,level,version) {
     });
 }
 function beginBridgeLogJournal(baseline) {
-    const permitted=bridgeLogLevels(seen.bridgeInfo?.raw);
+    const permitted=bridgeLogLevels(seen.bridgeInfo);
     if(!permitted.includes(baseline) || typeof seen.info?.version!=='string')
         throw Error('Missing validated bridge log baseline/version');
     if(bridgeLogJournal) throw Error('Bridge log mutation already owned');
