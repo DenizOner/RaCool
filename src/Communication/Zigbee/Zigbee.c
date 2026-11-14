@@ -791,6 +791,7 @@ static void esp_zb_task(void *pvParameters) {
     
     (void)pvParameters;
     ZigbeeInitPowerGuard pm_guard = {0};
+    bool afRegistrationSucceeded = false;
     /* Storage failures must not silently erase network credentials or counters. */
     esp_err_t err = nvs_flash_init_partition("zb_storage");
     if (err != ESP_OK) goto startup_done;
@@ -834,6 +835,7 @@ static void esp_zb_task(void *pvParameters) {
         ESP_LOGE(TAG, "Device descriptor registration failed: sdk_error=%d", (int)registrationError);
         err = ESP_FAIL; goto startup_done;
     }
+    afRegistrationSucceeded = true;
     ezb_zcl_core_action_handler_register(zb_action_handler);
     ESP_LOGI(TAG, "SDK device descriptors registered; starting network");
 
@@ -877,11 +879,18 @@ startup_done:
     while (!atomic_load(&zigbeeService.cleanupAllowed) || atomic_load(&zigbeeService.sdkReaders))
       vTaskDelay(1);
     esp_err_t cleanup = ESP_OK;
+    /* SDK 2.0.5: create allocates an unregistered AF tree. Registration
+     * installs the root in core globals, but clears it on a failed result;
+     * deinit only traverses the installed root. The application must free
+     * creation/endpoint/reporting-cache/registration failures itself. */
+    if (!afRegistrationSucceeded && zigbeeService.device) {
+      ezb_af_free_device_desc(zigbeeService.device);
+      zigbeeService.device = NULL;
+    }
     if (zigbeeService.sdkInitialized) {
-      /* The SDK's ezb_core_deinit -> af_desc_deinit releases the registered
-       * AF device/endpoint tree. An additional ezb_af_free_device_desc call
-       * (before or after deinit) double-frees or dereferences this tree.
-       * Wait for mainloop exit and SDK reader drain before SDK deinit. */
+      /* Once registered, the SDK's ezb_core_deinit -> af_desc_deinit owns
+       * the AF device/endpoint tree. An explicit application free would
+       * double-free it. Wait for mainloop exit and reader drain first. */
       ZigbeeRadioBoundary_Begin();
       cleanup = esp_zigbee_deinit();
       /* Invalidate the borrowed handle even on a partial SDK teardown:
