@@ -57,7 +57,8 @@ esp_err_t TargetZigbee_Init(const esp_zigbee_config_t *config) {
 esp_err_t TargetZigbee_Deinit(void) {
     if (!check_boundary(sdk_initializer == xTaskGetCurrentTaskHandle() &&
         !atomic_load(&sdk_locked) && atomic_load(&zigbeeService.mainloopExited) &&
-        atomic_load(&zigbeeService.cleanupAllowed) && !atomic_load(&zigbeeService.sdkReaders))) return ESP_FAIL;
+        atomic_load(&zigbeeService.cleanupAllowed) && !atomic_load(&zigbeeService.sdkReaders) &&
+        atomic_load(&freed_devices) == atomic_load(&deinit_calls) + 1)) return ESP_FAIL;
     atomic_fetch_add(&deinit_calls, 1);
     atomic_store(&sdk_active, false);
     return ESP_OK;
@@ -111,7 +112,10 @@ ezb_err_t TargetZigbee_RegisterDevice(ezb_af_device_desc_t device) {
     return check_boundary(device != NULL) ? EZB_ERR_NONE : EZB_ERR_INV_ARG;
 }
 void TargetZigbee_FreeDevice(ezb_af_device_desc_t device) {
-    check_boundary(device != NULL && !atomic_load(&sdk_active));
+    check_boundary(device != NULL && atomic_load(&sdk_active) &&
+                   atomic_load(&zigbeeService.mainloopExited) &&
+                   atomic_load(&zigbeeService.cleanupAllowed) &&
+                   !atomic_load(&zigbeeService.sdkReaders));
     atomic_fetch_add(&freed_devices, 1);
 }
 void TargetZigbee_RegisterActions(ezb_zcl_core_action_callback_t callback) { (void)callback; }
