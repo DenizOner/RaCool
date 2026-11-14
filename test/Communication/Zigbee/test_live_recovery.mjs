@@ -16,7 +16,7 @@ function publish(socket,topic,value,retained=false){
 }
 
 for(const [scenario,kind,endpoint,attribute,suffix] of [
-    ...['confirmed','foreign','uncertain','identity','reconfigure'].map(s=>[s,'radiator',1,0x8030,'climate']),
+    ...['confirmed','controlled_cut','foreign','uncertain','identity','reconfigure'].map(s=>[s,'radiator',1,0x8030,'climate']),
     ...[
         ['ambient',4,0x8031,'ambient_sensor'],
         ['processor',5,0x8032,'processor_sensor'],
@@ -24,7 +24,7 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
         ['memory',7,0x8034,'memory'],
         ['uptime',8,0x8035,'uptime']
     ].flatMap(([kind,endpoint,attribute,suffix]) =>
-        ['confirmed','foreign'].map(scenario=>[scenario,kind,endpoint,attribute,suffix]))
+        ['confirmed','controlled_cut','foreign'].map(scenario=>[scenario,kind,endpoint,attribute,suffix]))
 ]) test('recovery after '+scenario+' disconnect: '+kind,async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-recovery-'));
     let value=3, first=true, writes=[], clients=new Set();
@@ -54,7 +54,7 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
                 }
                 if(initial&&topic==='zigbee2mqtt/bridge/request/device/reporting/read'){
                     if(scenario==='foreign')value=9;
-                    socket.destroy();
+                    if(scenario!=='controlled_cut')socket.destroy();
                 }
                 if(initial&&scenario==='reconfigure'&&topic==='zigbee2mqtt/bridge/request/device/configure') socket.destroy();
             }
@@ -70,8 +70,11 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
         const env={...process.env,RACOOL_LOCAL_CONFIG:path.join(directory,'local.json'),RACOOL_MQTT_HOST:'127.0.0.1',
             RACOOL_MQTT_PORT:String(server.address().port),RACOOL_ZIGBEE_CONFIG:path.join(directory,'config.yaml'),
             RACOOL_LIVE_CONVERTER:path.join(directory,'unused.mjs'),RACOOL_DEVICE_IEEE:device.ieee_address};
-        for(const key of ['RACOOL_REPORT_TRAFFIC','RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE','RACOOL_RESULT_ID']) delete env[key];
+        for(const key of ['RACOOL_REPORT_TRAFFIC','RACOOL_REPORT_CHANGES',
+            'RACOOL_REPORT_RECONFIGURE','RACOOL_RESULT_ID',
+            'RACOOL_TEST_CUT_CLIENT_AFTER_WIRE']) delete env[key];
         if(scenario==='reconfigure')env.RACOOL_REPORT_RECONFIGURE='1';
+        if(scenario==='controlled_cut')env.RACOOL_TEST_CUT_CLIENT_AFTER_WIRE='1';
         child=spawn(process.execPath,[helper,'verify',control],{cwd:directory,env});
         let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);
         const exit=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.kill();reject(Error('Recovery test timed out'));},40000);
@@ -79,10 +82,15 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
         assert.equal(exit,1,output);
         const result=JSON.parse(await fs.readFile(path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
         assert.equal(result.completed,false);assert.equal(result.transportClosedBeforeCompletion,true);
-        assert.equal(result.recovery?.status,{confirmed:'restored',foreign:'foreign_change',uncertain:'delivery_unknown',identity:'failed',reconfigure:undefined}[scenario],output);
-        assert.equal(result.recovery?.artifacts?.length ?? 0,scenario==='confirmed'?3:scenario==='foreign'?1:0);
-        assert.deepEqual(writes,scenario==='confirmed'?[0,3]:[0]);
-        assert.equal(value,scenario==='confirmed'?3:scenario==='foreign'?9:0);
+        assert.equal(result.recovery?.status,{confirmed:'restored',controlled_cut:'restored',foreign:'foreign_change',
+            uncertain:'delivery_unknown',identity:'failed',reconfigure:undefined}[scenario],output);
+        assert.equal(result.recovery?.artifacts?.length ?? 0,['confirmed','controlled_cut'].includes(scenario)?3:scenario==='foreign'?1:0);
+        assert.deepEqual(writes,['confirmed','controlled_cut'].includes(scenario)?[0,3]:[0]);
+        assert.equal(value,['confirmed','controlled_cut'].includes(scenario)?3:scenario==='foreign'?9:0);
+        if(scenario==='controlled_cut') {
+            assert.equal(result.testClientDisconnect?.phase,'verified_wire',output);
+            assert.equal(result.testClientDisconnect?.control,control,output);
+        }
     } finally {
         child?.kill();for(const socket of clients)socket.destroy();await new Promise(resolve=>server.close(resolve));
         await fs.rm(directory,{recursive:true,force:true});

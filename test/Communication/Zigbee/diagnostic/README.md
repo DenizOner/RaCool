@@ -41,6 +41,24 @@ ZCL yanıtıyla salt okunur sorgular. Aynı kip `ambient`, `processor`, `health`
 `memory` ve `uptime` adlarıyla altı aralığı destekler. Bu yanıt MQTT durum
 önbelleğinden farklıdır; fiziksel çıktı veya RF raporu teslimi anlamına gelmez.
 
+
+**Yalnız test istemcisi için kontrollü kopma (onaylı fiziksel kabul):** Tek
+`report_interval_*` kontrolüyle `verify` çalıştırılırken, `RACOOL_REPORT_TRAFFIC`,
+`RACOOL_REPORT_CHANGES` ve `RACOOL_REPORT_RECONFIGURE` kapalıysa
+`RACOOL_TEST_CUT_CLIENT_AFTER_WIRE=1` kendi MQTT TCP soketini **yalnız**
+yardımcının yaptığı değişikliğin taze ZCL wire readback'i sonrasında keser.
+Bu bir broker/proxy/gateway müdahalesi değildir; recovery child ayrı MQTT
+bağlantılarında kimliği ve wire durumunu yeniden okuyup koşullu geri yazar.
+Beklenen süreç çıkışı, kopma nedeniyle başarısız olabilir: **yalnız
+`recovery.status=restored`, doğrulanmış son ZCL ve gerçek başlangıç değerlerine
+dönen readback ayrı ayrı PASS sayılır**. Yeniden deneme yapılmadan önce baseline,
+aynı cihaz ve yerel tek MQTT test istemcisi doğrulanmalı. İlk mutasyon/teslim
+belirsiz, yabancı değişim, değişen kimlik veya geri yükleme belirsizse **STOP**;
+asla kör SET tekrarı yok. Bu bayrak **köprü log seviyesini değiştirmez** ve global
+`bridge/options` geri yüklemesinin canlı kabulü yerine geçmez. Testler yalnız
+socket'i kendisi koparan istemciyi etkiler; gizli broker parolaları, PAN/IEEE
+kimlikleri ve ham MQTT frame'leri açık kayda alınmaz.
+
 `RACOOL_ZIGBEE_REPORT_DIAGNOSTIC=ON`, yalnız geçici firmware'e
 `report_trace.c` dosyasını ve on linker wrapper'ını ekler. Varsayılan OFF'tur.
 PlatformIO `esp32-c6-zigbee-report-trace` ortamı bu seçeneği yalnız kendi

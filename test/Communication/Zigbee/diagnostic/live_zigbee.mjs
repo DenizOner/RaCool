@@ -494,6 +494,16 @@ async function setAndRead(exp,value) {
         if(wire!==value) throw Error('Reporting interval ZCL readback mismatch');
         recoveryJournal.confirmed=value;
         recoveryJournal.uncertain=false;
+        /* Test-only fault injection closes THIS MQTT client's socket after
+         * correlated wire proof, not the broker, gateway or another client.
+         * Recovery children run in different modes and cannot retrigger it. */
+        if (mode==='verify' && process.env.RACOOL_TEST_CUT_CLIENT_AFTER_WIRE==='1' &&
+            value!==recoveryJournal.baseline) {
+            seen.testClientDisconnect={phase:'verified_wire',control:exp.name};
+            console.log('TEST_CLIENT_DISCONNECT_AFTER_VERIFIED_WIRE',exp.name);
+            socket.destroy();
+            throw Error('Test-only client disconnect after confirmed wire mutation');
+        }
     }
     seen.checks??=[];seen.checks.push({property:exp.property,value,actual,evidence});
     console.log('MATCHED_MQTT_STATE',exp.property,JSON.stringify(actual));
