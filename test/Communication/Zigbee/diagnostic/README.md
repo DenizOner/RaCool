@@ -17,13 +17,21 @@ ve özellik eşleşmesi doğrulanır; ZCL ile doğrulanmış yardımcı
 değeri aynı IEEE cihazına yeni bağlantı, taze korelasyonlu ZCL okuma ve tek
 geri yazma/son okuma ile koşullu geri yüklenir. Belirsiz teslim veya yabancı
 değer otomatik yazılmaz. Köprü log seviyesini geçici olarak debug'a alan verify/verify-fan/observe-fan-sources
-koşuları, önceki seviyeyi kaydeder. MQTT bağlantısı kesilirse, yalnızca yanıtı
-korelasyonlu biçimde onaylanmış log değişikliği için ayrı bağlantılarla köprü
-info değeri okunur, beklenen debug seviyesi hâlâ geçerliyse geri yazılır ve
-sonraki yeni bağlantıda tekrar okunur. Teslim belirsizse veya başka bir aktörün
-seviyesi gözlenirse otomatik yazılmaz; JSON'da delivery_unknown/foreign_change
-bırakılır. Köprü genelinde atomik karşılaştır-yazma yoktur ve bağlantıdaki
-info snapshot'ı diğer aktörlerle eşzamanlı bir işlem kanıtı değildir.
+koşuları mevcut bridge/info değeri, sürümü ve config_schema içindeki gerçek
+log_level enum sözleşmesini doğrular; desteklenmeyen eski 'warn' adı tahminle
+'warning' olarak çevrilmez. İstek requested, bridge/options yanıtı acknowledged,
+yalnız isteğin sonrasındaki retained olmayan bridge/info güncellemesi verified
+sayılır. ACK tek başına uygulanma veya kalıcılık kanıtı değildir.
+MQTT bağlantısı kesilirse yalnız uygulandığı canlı güncellemeyle doğrulanan
+yardımcı değişikliği için ayrı bağlantıda kimlik/sürüm/retained snapshot kontrol
+edilir; farklı değer ya da teslim belirsizliği varsa otomatik yazılmaz.
+Uygun durumda koşullu geri yazma için ayrıca yeni canlı bridge/info güncellemesi
+ve başka bağlantıda son snapshot gerekir; ancak o zaman restored raporlanır.
+Sadece retained snapshot 'snapshot_only', ACK-only/retained-only/delivery_unknown
+ise BLOCKED'dır. İkinci bağlantı kesintisi veya son okuma uyuşmazlığı başarısızdır.
+Hiçbir kayıtta tam bridge/info config'i, sır veya ağ kimliği yayınlanmaz.
+Köprü genelinde compare-and-swap/atomik koruma yoktur; iki okuma arasında başka
+bir yönetici yazabilir ve mutlak kalıcılık kanıtlanamaz.
 Diğer ayarlar için ayrı bağlantıda otomatik kurtarma yoktur. Belirsiz
 mutasyonu körlemesine yinelemeyin.
 
