@@ -53,7 +53,8 @@ export async function recoverReportingInterval(journal,device) {
 // Do not guess whether an older bridge accepts 'warn' or the current 'warning'.
 export function bridgeLogLevels(info) {
     const schema=info?.config_schema;
-    const allowed=schema?.properties?.advanced?.properties?.log_level?.enum ??
+    const allowed=info?.allowedLevels ??
+        schema?.properties?.advanced?.properties?.log_level?.enum ??
         schema?.properties?.log_level?.enum;
     if(!Array.isArray(allowed) || !allowed.includes('debug') ||
         !allowed.includes('info') || allowed.some(level=>typeof level!=='string'))
