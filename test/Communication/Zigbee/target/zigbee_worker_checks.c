@@ -32,6 +32,7 @@
  * joins nor resets a physical Zigbee network. */
 static SemaphoreHandle_t sdk_lock, loop_release;
 static atomic_bool sdk_locked, loop_entered, sdk_active, boundary_violation;
+static atomic_bool sdk_descriptor_created, sdk_descriptor_registered;
 static esp_zigbee_callback_t queued_sdk_callback;
 static void *queued_sdk_context;
 static atomic_uint sdk_post_calls;
@@ -52,17 +53,26 @@ esp_err_t TargetZigbee_Init(const esp_zigbee_config_t *config) {
     if (!check_boundary(config != NULL)) return ESP_ERR_INVALID_ARG;
     sdk_initializer = xTaskGetCurrentTaskHandle();
     atomic_store(&sdk_active, true);
+    atomic_store(&sdk_descriptor_created, false);
+    atomic_store(&sdk_descriptor_registered, false);
     return ESP_OK;
 }
 esp_err_t TargetZigbee_Deinit(void) {
     if (!check_boundary(sdk_initializer == xTaskGetCurrentTaskHandle() &&
         !atomic_load(&sdk_locked) && atomic_load(&zigbeeService.mainloopExited) &&
         atomic_load(&zigbeeService.cleanupAllowed) && !atomic_load(&zigbeeService.sdkReaders) &&
-        zigbeeService.device != NULL && !atomic_load(&app_free_calls) &&
-        atomic_load(&freed_devices) == atomic_load(&deinit_calls))) return ESP_FAIL;
-    /* Model the SDK freeing its registered AF tree during deinit. The mock
-     * records ownership; real memory reclamation is hardware-only evidence. */
-    atomic_fetch_add(&freed_devices, 1);
+        (atomic_load(&sdk_descriptor_registered) ?
+            atomic_load(&sdk_descriptor_created) && zigbeeService.device != NULL :
+            !atomic_load(&sdk_descriptor_created) && zigbeeService.device == NULL) &&
+        atomic_load(&freed_devices) ==
+            atomic_load(&deinit_calls) + atomic_load(&app_free_calls))) return ESP_FAIL;
+    /* Only a successfully registered AF tree remains in SDK core globals.
+     * This mock records ownership, not actual SDK heap reclamation. */
+    if (atomic_load(&sdk_descriptor_registered)) {
+        atomic_fetch_add(&freed_devices, 1);
+        atomic_store(&sdk_descriptor_created, false);
+        atomic_store(&sdk_descriptor_registered, false);
+    }
     atomic_fetch_add(&deinit_calls, 1);
     atomic_store(&sdk_active, false);
     return ESP_OK;
@@ -111,15 +121,29 @@ ezb_err_t TargetZigbee_ConfigureMemory(const ezb_mem_config_t *config) {
         sdk_initializer == xTaskGetCurrentTaskHandle()) ? EZB_ERR_NONE : EZB_ERR_INV_STATE;
 }
 
-ezb_af_device_desc_t TargetZigbee_CreateDevice(void) { return (ezb_af_device_desc_t)1; }
+ezb_af_device_desc_t TargetZigbee_CreateDevice(void) {
+    if (!check_boundary(atomic_load(&sdk_active) &&
+                        !atomic_load(&sdk_descriptor_created))) return NULL;
+    atomic_store(&sdk_descriptor_created, true);
+    return (ezb_af_device_desc_t)1;
+}
 ezb_err_t TargetZigbee_RegisterDevice(ezb_af_device_desc_t device) {
-    return check_boundary(device != NULL) ? EZB_ERR_NONE : EZB_ERR_INV_ARG;
+    if (!check_boundary(device != NULL && atomic_load(&sdk_descriptor_created) &&
+                        !atomic_load(&sdk_descriptor_registered))) return EZB_ERR_INV_ARG;
+    atomic_store(&sdk_descriptor_registered, true);
+    return EZB_ERR_NONE;
 }
 void TargetZigbee_FreeDevice(ezb_af_device_desc_t device) {
-    (void)device;
-    /* Explicit application free would compete with SDK deinit ownership. */
+    /* Pre-registration rollback is the application's responsibility. */
+    if (!check_boundary(device != NULL && atomic_load(&sdk_active) &&
+                        atomic_load(&sdk_descriptor_created) &&
+                        !atomic_load(&sdk_descriptor_registered) &&
+                        atomic_load(&zigbeeService.mainloopExited) &&
+                        atomic_load(&zigbeeService.cleanupAllowed) &&
+                        !atomic_load(&zigbeeService.sdkReaders))) return;
     atomic_fetch_add(&app_free_calls, 1);
-    atomic_store(&boundary_violation, true);
+    atomic_fetch_add(&freed_devices, 1);
+    atomic_store(&sdk_descriptor_created, false);
 }
 void TargetZigbee_RegisterActions(ezb_zcl_core_action_callback_t callback) { (void)callback; }
 ezb_err_t TargetZigbee_SetDeviceType(ezb_nwk_device_type_t type) { (void)type; return EZB_ERR_NONE; }
