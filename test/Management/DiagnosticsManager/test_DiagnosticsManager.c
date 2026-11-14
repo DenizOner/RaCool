@@ -421,7 +421,7 @@ void test_DiagnosticsManager_PeriodicChecksOthersBeforeZigbeeGrace(void) {
     otherCheckAt = pdMS_TO_TICKS(40000);
     TEST_ASSERT_FALSE(RunScan(true));
     TEST_ASSERT_EQUAL(0, otherCheckAt);
-    TEST_ASSERT_TRUE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_TRUE(atomic_load(&diagManager.periodicZigbeePending));
     TEST_ASSERT_TRUE(diagManager.scanPending);
     TEST_ASSERT_FALSE(diagManager.lastResult.completed);
     TEST_ASSERT_EQUAL(2, diagManager.pendingResult.services_checked);
@@ -445,7 +445,7 @@ void test_DiagnosticsManager_PersistentOtherFailureNeverGetsHidden(void) {
         .name = "Other", .check_fn = sample_custom_check_fail
     };
     TEST_ASSERT_TRUE(RunScan(true));
-    TEST_ASSERT_FALSE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_FALSE(atomic_load(&diagManager.periodicZigbeePending));
     TEST_ASSERT_TRUE(diagManager.lastResult.completed);
     TEST_ASSERT_EQUAL(2, diagManager.lastResult.services_checked);
     TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
@@ -460,7 +460,7 @@ void test_DiagnosticsManager_ZigbeeRestartDuringOtherScanUsesGrace(void) {
         .name = "Restart", .check_fn = RestartDuringOtherCheck
     };
     TEST_ASSERT_FALSE(RunScan(true));
-    TEST_ASSERT_TRUE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_TRUE(atomic_load(&diagManager.periodicZigbeePending));
     readinessService.CheckHealth = Healthy;
     TEST_ASSERT_TRUE(CompletePeriodicZigbee(pdMS_TO_TICKS(500), false));
     TEST_ASSERT_EQUAL(100, diagManager.lastResult.health_score);
@@ -473,8 +473,11 @@ void test_DiagnosticsManager_ManualRequestInterruptsPendingGrace(void) {
     diagManager.state = SERVICE_STATE_STARTED;
     IDiagnosticsManager *dm = DiagnosticsManager_GetModule();
     TEST_ASSERT_EQUAL(DIAG_OK, dm->StartAsyncSelfTest(dm));
+    TEST_ASSERT_EQUAL(DIAG_ERR_BUSY, dm->StartAsyncSelfTest(dm));
     TEST_ASSERT_TRUE(diagManager.requested);
+    TEST_ASSERT_TRUE(atomic_load(&diagManager.periodicZigbeePending));
     TEST_ASSERT_TRUE(CompletePeriodicZigbee(pdMS_TO_TICKS(100), true));
+    TEST_ASSERT_FALSE(atomic_load(&diagManager.periodicZigbeePending));
     TEST_ASSERT_TRUE(diagManager.lastResult.completed);
     TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
     TEST_ASSERT_TRUE(diagManager.requested);
@@ -494,7 +497,7 @@ void test_DiagnosticsManager_PeriodicGraceIsWrapSafe(void) {
     TEST_ASSERT_FALSE(diagManager.lastResult.completed);
     TEST_ASSERT_TRUE(CompletePeriodicZigbee(
         (TickType_t)(started + PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS)), false));
-    TEST_ASSERT_FALSE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_FALSE(atomic_load(&diagManager.periodicZigbeePending));
     TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
     TEST_ASSERT_EQUAL_STRING(SVC_NAME_ZIGBEE, diagManager.lastResult.last_failed_service);
 }

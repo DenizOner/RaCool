@@ -32,7 +32,8 @@ typedef struct {
     bool scanPending;
     /* Owned by DiagnosticWorker; no health snapshot is published while Zigbee
      * is the sole temporarily failing periodic service. */
-    bool periodicZigbeePending;
+    /* Worker writes; the manual self-test API reads from another task. */
+    atomic_bool periodicZigbeePending;
     TickType_t periodicZigbeeStarted;
     TickType_t periodicZigbeeLastProbe;
     bool pendingHeapWarning;
@@ -246,7 +247,7 @@ static bool RunScan(bool periodic) {
      * Failures in any other service, custom check or heap publish at once. */
     if (periodicZigbee && result.services_checked &&
         result.services_healthy + 1 == result.services_checked && !heapWarning) {
-        diagManager.periodicZigbeePending = true;
+        atomic_store(&diagManager.periodicZigbeePending, true);
         diagManager.periodicZigbeeStarted = xTaskGetTickCount();
         diagManager.periodicZigbeeLastProbe = diagManager.periodicZigbeeStarted;
         return false;
@@ -255,7 +256,7 @@ static bool RunScan(bool periodic) {
 }
 
 static bool CompletePeriodicZigbee(TickType_t now, bool manualRequested) {
-    if (!diagManager.periodicZigbeePending || !diagManager.scanPending) return false;
+    if (!atomic_load(&diagManager.periodicZigbeePending) || !diagManager.scanPending) return false;
     TickType_t elapsed = (TickType_t)(now - diagManager.periodicZigbeeStarted);
     if (!manualRequested && elapsed < PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS) &&
         (TickType_t)(now - diagManager.periodicZigbeeLastProbe) <
@@ -278,7 +279,7 @@ static bool CompletePeriodicZigbee(TickType_t now, bool manualRequested) {
     diagManager.pendingResult.health_score = CalculateHealthScore(
         diagManager.pendingResult.services_healthy, diagManager.pendingResult.services_checked);
     diagManager.pendingResult.last_test_time = (uint32_t)(esp_timer_get_time() / 1000000);
-    diagManager.periodicZigbeePending = false;
+    atomic_store(&diagManager.periodicZigbeePending, false);
     return CommitScan();
 }
 
@@ -298,7 +299,7 @@ static void DiagnosticWorker(void *unused) {
             vTaskDelay(PositiveTicks(DIAGNOSTICS_WORKER_POLL_MS));
             continue;
         }
-        if (diagManager.periodicZigbeePending) {
+        if (atomic_load(&diagManager.periodicZigbeePending)) {
             bool manualRequested = false;
             if (Lock()) {
                 manualRequested = diagManager.requested;
@@ -403,7 +404,7 @@ static int32_t Diag_Stop(IService *self) {
     diagManager.requested = false;
     diagManager.lastResult.is_running = false;
     diagManager.scanPending = false;
-    diagManager.periodicZigbeePending = false;
+    atomic_store(&diagManager.periodicZigbeePending, false);
     diagManager.customCheckCount = 0;
     memset(diagManager.customChecks, 0, sizeof(diagManager.customChecks));
     diagManager.state = SERVICE_STATE_STOPPED;
@@ -432,7 +433,7 @@ static int32_t Diag_StartAsyncSelfTest(IDiagnosticsManager *self) {
     if (!self || !Lock()) return DIAG_ERR_BUSY;
     int32_t result = DIAG_ERR_INVALID_STATE;
     if (diagManager.state == SERVICE_STATE_STARTED && !atomic_load(&diagManager.closing)) {
-        if (diagManager.requested || (diagManager.lastResult.is_running && !diagManager.periodicZigbeePending)) result = DIAG_ERR_BUSY;
+        if (diagManager.requested || (diagManager.lastResult.is_running && !atomic_load(&diagManager.periodicZigbeePending))) result = DIAG_ERR_BUSY;
         else { diagManager.requested = true; result = DIAG_OK; }
     }
     xSemaphoreGive(diagManager.mutex);
@@ -577,7 +578,7 @@ static int32_t Diag_InitializeWithConfig(IDiagnosticsManager *self,
     diagManager.periodicRunning = config.enablePeriodicTest;
     memset(&diagManager.lastResult, 0, sizeof(DiagnosticsTestResult));
     diagManager.scanPending = false;
-    diagManager.periodicZigbeePending = false;
+    atomic_store(&diagManager.periodicZigbeePending, false);
     atomic_store(&diagManager.closing, false);
     atomic_store(&diagManager.emergency, false);
     if (diagManager.mutex) {
