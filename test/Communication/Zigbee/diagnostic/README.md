@@ -109,9 +109,13 @@ boşta olduğunu doğrular. Zigbee worker, son SDK okuru ayrıldıktan ve ana d�
 SDK deinit çağrısını bir kez yapar. İkinci fiziksel 2.0.5 denemesinde
 `ezb_af_free_device_desc` çağrısının **deinit öncesine alınması** da çöktü;
 ELF izi `esp_zigbee_deinit → ezb_core_deinit → af_desc_deinit →
-af_free_device_desc` zincirini gösterdi. AF ağacını SDK kendisi temizlediği
-için uygulama ayrıca free çağırmaz; deinit dönüşünde uygulama handle'ı
-geçersiz kılınır. Yerel native/target taklitleri bu sahipliği modeller ancak
+af_free_device_desc` zincirini gösterdi. AF ağacı **başarılı kayıt sonrasında** SDK mülkiyetindedir; deinit kendisi
+temizlediği için uygulama ayrıca free çağırmaz. SDK 2.0.5 arşivindeki
+`af_desc.c.obj` incelemesine göre kayıt öncesi veya başarısız kayıt sonrasında
+SDK küresel listesinde kök tutulmaz: bu hata yollarında uygulama ağacı
+SDK deinit öncesinde **bir kez** serbest bırakır. Sonrasında uygulama handle'ı
+geçersiz kılınır. Bu sözleşme SDK sürümüne bağlıdır; yükseltmede yeniden
+doğrulanmalıdır. Yerel native/target taklitleri bu sahipliği modeller ancak
 gerçek SDK bellek yönetimini kanıtlamaz. Üç ardışık yeniden başlatma,
 ağ/ayar kalıcılığı ve EP1 RF teslimi gerçek kartta doğrulanmalıdır. Sonucu belirsiz bir restartta tek kontrollü kurtarma
 resetinden sonra gerçek boot ve reporting değerlerini denetler. Geri yükleme
