@@ -9,10 +9,10 @@ import {fileURLToPath} from 'node:url';
 
 const helper=fileURLToPath(new URL('./diagnostic/live_zigbee.mjs',import.meta.url));
 function field(text){const value=Buffer.from(text),length=Buffer.alloc(2);length.writeUInt16BE(value.length);return Buffer.concat([length,value]);}
-function publish(socket,topic,value){
+function publish(socket,topic,value,retained=false){
     const body=Buffer.concat([field(topic),Buffer.from(JSON.stringify(value))]);let size=body.length,bytes=[];
     do{let b=size%128;size=Math.floor(size/128);bytes.push(b|(size?128:0));}while(size);
-    socket.write(Buffer.concat([Buffer.from([0x30,...bytes]),body]));
+    socket.write(Buffer.concat([Buffer.from([retained?0x31:0x30,...bytes]),body]));
 }
 
 for(const [scenario,kind,endpoint,attribute,suffix] of [
@@ -90,17 +90,23 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
 });
 
 
-for (const scenario of ['confirmed','foreign','uncertain']) test(
+for (const scenario of ['confirmed','foreign','uncertain','ack_only','retained_update',
+    'restore_disconnect','post_restore_foreign','version_drift','missing_schema']) test(
     'bridge logging recovery after '+scenario+' MQTT disconnect', async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-log-recovery-'));
     const control='report_interval_radiator_s',property=control+'_climate';
     const device={friendly_name:'fixture',ieee_address:'0x0000000000000123',
         network_address:123,model_id:'RaCool-ESP32C6',definition:{exposes:[{
             name:control,property,type:'numeric',access:7,value_min:0,value_max:600,value_step:1}]}};
-    let level='info',value=3,first=true;
+    let level='info',value=3,first=true,connections=0;
+    const schema={properties:{advanced:{properties:{log_level:{
+        enum:['debug','info','warning','error']}}}}};
+    const bridgeInfo=()=>({version:scenario==='version_drift'&&connections>1?'2.1.0':'2.0.0',
+        config:{advanced:{log_level:level}},
+        ...(scenario==='missing_schema'?{}:{config_schema:schema})});
     const writes=[],clients=new Set();
     const server=net.createServer(socket=>{
-        const initial=first;first=false;clients.add(socket);
+        const initial=first;first=false;connections++;clients.add(socket);
         socket.on('close',()=>clients.delete(socket));
         socket.on('error',e=>{if(e.code!=='ECONNRESET') throw e;});
         let buffer=Buffer.alloc(0);
@@ -112,8 +118,10 @@ for (const scenario of ['confirmed','foreign','uncertain']) test(
             if(type===1)socket.write(Buffer.from([0x20,2,0,0]));
             if(type===8){
                 const n=body.readUInt16BE(2),topic=body.subarray(4,4+n).toString();
-                if(topic==='zigbee2mqtt/bridge/info')
-                    publish(socket,topic,{config:{advanced:{log_level:level}}});
+                if(topic==='zigbee2mqtt/bridge/info') {
+                    if(scenario==='post_restore_foreign' && connections>=4) level='warning';
+                    publish(socket,topic,bridgeInfo(),true);
+                }
                 if(topic==='zigbee2mqtt/bridge/devices'){
                     publish(socket,topic,[device]);
                     publish(socket,'zigbee2mqtt/fixture',{[property]:value});
@@ -126,14 +134,24 @@ for (const scenario of ['confirmed','foreign','uncertain']) test(
                 if(topic.endsWith('/set'))value=payload[property];
                 if(topic==='zigbee2mqtt/bridge/request/options'){
                     const desired=payload.options?.advanced?.log_level;
-                    if(!['debug','info','warn','error'].includes(desired))throw Error('Invalid log level');
+                    if(!['debug','info','warning','error'].includes(desired))
+                        throw Error('Invalid log level');
                     writes.push(desired);level=desired;
                     if(initial&&scenario==='uncertain'){socket.destroy();continue;}
                     publish(socket,'zigbee2mqtt/bridge/response/options',
-                        {status:'ok',transaction:payload.transaction,data:{}});
+                        {status:'ok',transaction:payload.transaction,data:{restart_required:false}});
+                    if(initial && ['ack_only','retained_update'].includes(scenario)) {
+                        if(scenario==='retained_update')
+                            publish(socket,'zigbee2mqtt/bridge/info',bridgeInfo(),true);
+                        setTimeout(()=>socket.end(),100);
+                    } else if(!initial && scenario==='restore_disconnect' && desired==='info') {
+                        setTimeout(()=>socket.end(),100);
+                    } else {
+                        publish(socket,'zigbee2mqtt/bridge/info',bridgeInfo());
+                    }
                 }
                 if(initial&&topic==='zigbee2mqtt/bridge/request/device/reporting/read'){
-                    if(scenario==='foreign')level='warn';
+                    if(scenario==='foreign')level='warning';
                     socket.destroy();
                 }
             }
@@ -166,10 +184,26 @@ for (const scenario of ['confirmed','foreign','uncertain']) test(
             path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
         assert.equal(result.completed,false,output);
         assert.equal(result.transportClosedBeforeCompletion,true,output);
-        assert.equal(result.bridgeLogRecovery?.status,
-            {confirmed:'restored',foreign:'foreign_change',uncertain:'delivery_unknown'}[scenario],output);
-        assert.deepEqual(writes,scenario==='confirmed'?['debug','info']:['debug']);
-        assert.equal(level,scenario==='confirmed'?'info':scenario==='foreign'?'warn':'debug');
+        const expected={
+            confirmed:'restored',foreign:'foreign_change',uncertain:'delivery_unknown',
+            ack_only:'delivery_unknown',retained_update:'delivery_unknown',
+            restore_disconnect:'failed',post_restore_foreign:'failed',
+            version_drift:'failed',missing_schema:undefined
+        }[scenario];
+        assert.equal(result.bridgeLogRecovery?.status,expected,output);
+        if(scenario==='confirmed') {
+            assert.equal(result.bridgeLogRecovery.verifiedLive,true,output);
+            assert.equal(result.bridgeLogRecovery.after.value,'info',output);
+            assert.equal(result.bridgeLogRecovery.after.retained,true,output);
+        }
+        assert.deepEqual(writes,
+            scenario==='missing_schema'?[]:
+            ['confirmed','restore_disconnect','post_restore_foreign'].includes(scenario)
+                ?['debug','info']:['debug']);
+        assert.equal(level,
+            scenario==='missing_schema'?'info':
+            scenario==='foreign'||scenario==='post_restore_foreign'?'warning':
+            ['confirmed','restore_disconnect'].includes(scenario)?'info':'debug');
     } finally{
         child?.kill();for(const socket of clients)socket.destroy();
         await new Promise(resolve=>server.close(resolve));
