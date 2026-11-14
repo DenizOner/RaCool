@@ -105,11 +105,15 @@ silerek veya özel alan değiştirerek hata üretmeyin. Sınırlı temiz açıl�
 aralıklı kök nedenin kanıtı saymayın.
 
 `verify_zigbee_lifecycle.py` her servis restartından önce menü ve sistemin
-boşta olduğunu doğrular. Zigbee worker, son SDK okuru ayrıldıktan ve ana döngü
-çıktıktan sonra AF device/endpoint tanımlayıcılarını SDK deinit **öncesinde**
-bırakır; SDK kapandıktan sonra AF free çağrısı geçerli sayılmaz.
-Yerel native/target taklitlerinde sıra kontrolü gerçek SDK bellek kabulü değildir; üç
-ardışık yeniden başlatma ve ağ/ayar kalıcılığı gerçek kartta doğrulanmalıdır. Sonucu belirsiz bir restartta tek kontrollü kurtarma
+boşta olduğunu doğrular. Zigbee worker, son SDK okuru ayrıldıktan ve ana döngü çıktıktan sonra
+SDK deinit çağrısını bir kez yapar. İkinci fiziksel 2.0.5 denemesinde
+`ezb_af_free_device_desc` çağrısının **deinit öncesine alınması** da çöktü;
+ELF izi `esp_zigbee_deinit → ezb_core_deinit → af_desc_deinit →
+af_free_device_desc` zincirini gösterdi. AF ağacını SDK kendisi temizlediği
+için uygulama ayrıca free çağırmaz; deinit dönüşünde uygulama handle'ı
+geçersiz kılınır. Yerel native/target taklitleri bu sahipliği modeller ancak
+gerçek SDK bellek yönetimini kanıtlamaz. Üç ardışık yeniden başlatma,
+ağ/ayar kalıcılığı ve EP1 RF teslimi gerçek kartta doğrulanmalıdır. Sonucu belirsiz bir restartta tek kontrollü kurtarma
 resetinden sonra gerçek boot ve reporting değerlerini denetler. Geri yükleme
 sırasındaki SDK hata satırları saklanır ve test başarısız kalır; Developer Mode
 tercihi mümkünse checked readback ile geri alınır. Fatal hata veya yabancı
