@@ -1581,13 +1581,6 @@ static esp_err_t sdk_discards_radio_disable(void) {
     TEST_ASSERT_NULL(zigbeeService.device);
     __wrap_esp_ieee802154_disable(); return ESP_OK;
 }
-static esp_err_t sdk_owns_descriptor_cleanup(void) {
-    TEST_ASSERT_EQUAL(0, ezb_af_free_device_desc_fake.call_count);
-    TEST_ASSERT_EQUAL_PTR((void *)1, zigbeeService.device);
-    TEST_ASSERT_TRUE(atomic_load(&zigbeeService.mainloopExited));
-    TEST_ASSERT_EQUAL(0, atomic_load(&zigbeeService.sdkReaders));
-    return ESP_OK;
-}
 static esp_err_t sdk_registered_deinit_failure(void) {
     TEST_ASSERT_EQUAL(0, ezb_af_free_device_desc_fake.call_count);
     TEST_ASSERT_EQUAL_PTR((void *)1, zigbeeService.device);
