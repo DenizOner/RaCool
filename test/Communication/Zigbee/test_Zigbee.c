@@ -1577,7 +1577,24 @@ static esp_err_t sdk_discards_radio_enable(const esp_zigbee_config_t *config) {
     (void)config; __wrap_esp_ieee802154_enable(); return ESP_OK;
 }
 static esp_err_t sdk_discards_radio_disable(void) {
+    TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_NULL(zigbeeService.device);
     __wrap_esp_ieee802154_disable(); return ESP_OK;
+}
+static esp_err_t sdk_registered_deinit_failure(void) {
+    TEST_ASSERT_EQUAL(0, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_EQUAL_PTR((void *)1, zigbeeService.device);
+    TEST_ASSERT_TRUE(atomic_load(&zigbeeService.mainloopExited));
+    TEST_ASSERT_EQUAL(0, atomic_load(&zigbeeService.sdkReaders));
+    return ESP_FAIL;
+}
+static esp_err_t sdk_requires_unregistered_descriptor_released(void) {
+    TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_EQUAL_PTR((void *)1, ezb_af_free_device_desc_fake.arg0_val);
+    TEST_ASSERT_NULL(zigbeeService.device);
+    TEST_ASSERT_TRUE(atomic_load(&zigbeeService.mainloopExited));
+    TEST_ASSERT_EQUAL(0, atomic_load(&zigbeeService.sdkReaders));
+    return ESP_OK;
 }
 void test_ZigbeeOwnerRejectsHiddenRadioInitializationFailure(void) {
     esp_pm_lock_create_fake.custom_fake = create_init_pm_guard;
@@ -1590,7 +1607,7 @@ void test_ZigbeeOwnerRejectsHiddenRadioInitializationFailure(void) {
     TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
     TEST_ASSERT_EQUAL(0, esp_zigbee_launch_mainloop_fake.call_count);
 }
-void test_ZigbeeOwnerRetainsDescriptorOnHiddenRadioCleanupFailure(void) {
+void test_ZigbeeOwnerReleasesUnregisteredAfTreeDespiteRadioCleanupFailure(void) {
     esp_pm_lock_create_fake.custom_fake = create_init_pm_guard;
     mocked_ezb_af_create_device_desc_fake.return_val = (void *)1;
     mocked_ezb_af_device_desc_register_fake.return_val = EZB_ERR_INV_ARG;
@@ -1599,9 +1616,36 @@ void test_ZigbeeOwnerRetainsDescriptorOnHiddenRadioCleanupFailure(void) {
     mocked_vTaskSuspend_fake.custom_fake = acknowledge_and_return;
     if (!setjmp(worker_return)) esp_zb_task(NULL);
     TEST_ASSERT_EQUAL(ESP_FAIL, atomic_load(&zigbeeService.cleanupResult));
-    TEST_ASSERT_EQUAL(0, ezb_af_free_device_desc_fake.call_count);
-    TEST_ASSERT_EQUAL_PTR((void *)1, zigbeeService.device);
+    TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
+    TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_NULL(zigbeeService.device);
     TEST_ASSERT_TRUE(atomic_load(&zigbeeService.closing));
+    TEST_ASSERT_FALSE(zigbeeService.sdkInitialized);
+}
+void test_ZigbeeOwnerInvalidatesRegisteredAfHandleOnSdkDeinitFailureWithoutDoubleFree(void) {
+    esp_pm_lock_create_fake.custom_fake = create_init_pm_guard;
+    mocked_ezb_af_create_device_desc_fake.return_val = (void *)1;
+    mocked_ezb_dev_start_fake.return_val = EZB_ERR_INV_STATE;
+    esp_zigbee_deinit_fake.custom_fake = sdk_registered_deinit_failure;
+    mocked_vTaskSuspend_fake.custom_fake = acknowledge_and_return;
+    if (!setjmp(worker_return)) esp_zb_task(NULL);
+    TEST_ASSERT_EQUAL(ESP_FAIL, atomic_load(&zigbeeService.cleanupResult));
+    TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
+    TEST_ASSERT_EQUAL(0, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_NULL(zigbeeService.device);
+    TEST_ASSERT_FALSE(zigbeeService.sdkInitialized);
+}
+void test_ZigbeeOwnerFreesUnregisteredTreeEvenWhenSdkDeinitFails(void) {
+    esp_pm_lock_create_fake.custom_fake = create_init_pm_guard;
+    mocked_ezb_af_create_device_desc_fake.return_val = (void *)1;
+    mocked_ezb_af_device_desc_register_fake.return_val = EZB_ERR_INV_ARG;
+    esp_zigbee_deinit_fake.return_val = ESP_FAIL;
+    mocked_vTaskSuspend_fake.custom_fake = acknowledge_and_return;
+    if (!setjmp(worker_return)) esp_zb_task(NULL);
+    TEST_ASSERT_EQUAL(ESP_FAIL, atomic_load(&zigbeeService.cleanupResult));
+    TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
+    TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_NULL(zigbeeService.device);
     TEST_ASSERT_FALSE(zigbeeService.sdkInitialized);
 }
 void test_Zigbee_StorageFailurePropagatesWithoutEraseOrSdkAdmission(void) {
@@ -1644,12 +1688,14 @@ void test_Zigbee_EndpointFailurePreventsDeviceStartupAndUnwindsOwner(void) {
     TEST_ASSERT_EQUAL(0, mocked_ezb_dev_start_fake.call_count);
     TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
     TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_EQUAL_PTR((void *)1, ezb_af_free_device_desc_fake.arg0_val);
     TEST_ASSERT_NULL(zigbeeService.device);
 }
-void test_Zigbee_DeviceRegistrationFailurePreventsLoopAndReleasesOwnedDescriptor(void) {
+void test_Zigbee_DeviceRegistrationFailurePreventsLoopAndReclaimsUnregisteredDescriptor(void) {
     esp_pm_lock_create_fake.custom_fake = create_init_pm_guard;
     mocked_ezb_af_create_device_desc_fake.return_val = (void *)1;
     mocked_ezb_af_device_desc_register_fake.return_val = EZB_ERR_INV_ARG;
+    esp_zigbee_deinit_fake.custom_fake = sdk_requires_unregistered_descriptor_released;
     mocked_vTaskSuspend_fake.custom_fake = acknowledge_and_return;
     if (!setjmp(worker_return)) esp_zb_task(NULL);
     TEST_ASSERT_EQUAL(ESP_FAIL, atomic_load(&zigbeeService.startupResult));
@@ -1657,6 +1703,7 @@ void test_Zigbee_DeviceRegistrationFailurePreventsLoopAndReleasesOwnedDescriptor
     TEST_ASSERT_EQUAL(0, esp_zigbee_launch_mainloop_fake.call_count);
     TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
     TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_NULL(zigbeeService.device);
 }
 void test_Zigbee_ConsoleFailureRetriesWithoutCreatingAnotherSdkOwner(void) {
     IZigbee *radio = Zigbee_Create();
@@ -1687,6 +1734,7 @@ void test_Zigbee_ReportingCacheFailurePreventsSdkRegistrationAndUnwindsOwner(voi
     esp_pm_lock_create_fake.custom_fake = create_init_pm_guard;
     mocked_ezb_af_create_device_desc_fake.return_val = (void *)1;
     ezb_plat_datasets_delete_fake.return_val = EZB_ERR_NO_MEM;
+    esp_zigbee_deinit_fake.custom_fake = sdk_requires_unregistered_descriptor_released;
     mocked_vTaskSuspend_fake.custom_fake = acknowledge_and_return;
     if (!setjmp(worker_return)) esp_zb_task(NULL);
     TEST_ASSERT_EQUAL(ESP_FAIL, atomic_load(&zigbeeService.startupResult));
@@ -1694,6 +1742,7 @@ void test_Zigbee_ReportingCacheFailurePreventsSdkRegistrationAndUnwindsOwner(voi
     TEST_ASSERT_EQUAL(0, mocked_ezb_dev_start_fake.call_count);
     TEST_ASSERT_EQUAL(1, esp_zigbee_deinit_fake.call_count);
     TEST_ASSERT_EQUAL(1, ezb_af_free_device_desc_fake.call_count);
+    TEST_ASSERT_NULL(zigbeeService.device);
 }
 
 static IZigbee *prepare_connected_notification(void) {

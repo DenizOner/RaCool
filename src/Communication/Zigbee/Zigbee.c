@@ -42,7 +42,7 @@
 
 static const char *TAG = "Zigbee";
 /* ConfigurationManager owns report intervals. Rebuild only the SDK's derived
- * reporting cache before endpoint registration. SDK 2.0.4 restores reporting
+ * reporting cache before endpoint registration. The SDK may restore reporting
  * entries while rewriting their dataset; stale duplicate schedulers otherwise
  * survive updates to the first matching handle. Network datasets are untouched. */
 static esp_err_t ResetDerivedReportingCache(void) {
@@ -791,6 +791,7 @@ static void esp_zb_task(void *pvParameters) {
     
     (void)pvParameters;
     ZigbeeInitPowerGuard pm_guard = {0};
+    bool afRegistrationSucceeded = false;
     /* Storage failures must not silently erase network credentials or counters. */
     esp_err_t err = nvs_flash_init_partition("zb_storage");
     if (err != ESP_OK) goto startup_done;
@@ -834,6 +835,7 @@ static void esp_zb_task(void *pvParameters) {
         ESP_LOGE(TAG, "Device descriptor registration failed: sdk_error=%d", (int)registrationError);
         err = ESP_FAIL; goto startup_done;
     }
+    afRegistrationSucceeded = true;
     ezb_zcl_core_action_handler_register(zb_action_handler);
     ESP_LOGI(TAG, "SDK device descriptors registered; starting network");
 
@@ -877,18 +879,26 @@ startup_done:
     while (!atomic_load(&zigbeeService.cleanupAllowed) || atomic_load(&zigbeeService.sdkReaders))
       vTaskDelay(1);
     esp_err_t cleanup = ESP_OK;
-    if (zigbeeService.sdkInitialized) {
-        ZigbeeRadioBoundary_Begin();
-      cleanup = esp_zigbee_deinit();
-        if (cleanup == ESP_OK) cleanup = ZigbeeRadioBoundary_Result();
-        if (cleanup != ESP_OK) ESP_LOGE(TAG, "SDK owner deinit failed: %s", esp_err_to_name(cleanup));
-      /* SDK 2.0.4 tears down its core/lock before platform cleanup returns.
-       * Never call deinit a second time after a partial platform failure. */
-      zigbeeService.sdkInitialized = false;
-    }
-    if (cleanup == ESP_OK && zigbeeService.device) {
+    /* SDK 2.0.5: create allocates an unregistered AF tree. Registration
+     * installs the root in core globals, but clears it on a failed result;
+     * deinit only traverses the installed root. The application must free
+     * creation/endpoint/reporting-cache/registration failures itself. */
+    if (!afRegistrationSucceeded && zigbeeService.device) {
       ezb_af_free_device_desc(zigbeeService.device);
       zigbeeService.device = NULL;
+    }
+    if (zigbeeService.sdkInitialized) {
+      /* Once registered, the SDK's ezb_core_deinit -> af_desc_deinit owns
+       * the AF device/endpoint tree. An explicit application free would
+       * double-free it. Wait for mainloop exit and reader drain first. */
+      ZigbeeRadioBoundary_Begin();
+      cleanup = esp_zigbee_deinit();
+      /* Invalidate the borrowed handle even on a partial SDK teardown:
+       * retrying deinit or dereferencing it would be unsafe. */
+      zigbeeService.device = NULL;
+      if (cleanup == ESP_OK) cleanup = ZigbeeRadioBoundary_Result();
+      if (cleanup != ESP_OK) ESP_LOGE(TAG, "SDK owner deinit failed: %s", esp_err_to_name(cleanup));
+      zigbeeService.sdkInitialized = false;
     }
     if (cleanup == ESP_OK) Zigbee_ConsoleSdkStopped();
     esp_err_t guard_cleanup = ReleaseInitPowerGuard(&pm_guard);
