@@ -49,35 +49,55 @@ export async function recoverReportingInterval(journal,device) {
 }
 
 
-const BRIDGE_LEVELS = new Set(['debug','info','warn','error']);
+// The live bridge publishes its allowed options in bridge/info.config_schema.
+// Do not guess whether an older bridge accepts 'warn' or the current 'warning'.
+export function bridgeLogLevels(info) {
+    const schema=info?.config_schema;
+    const allowed=schema?.properties?.advanced?.properties?.log_level?.enum ??
+        schema?.properties?.log_level?.enum;
+    if(!Array.isArray(allowed) || !allowed.includes('debug') ||
+        !allowed.includes('info') || allowed.some(level=>typeof level!=='string'))
+        throw Error('Missing authoritative bridge log-level schema; no writes');
+    return allowed;
+}
 
-// Bridge logging is global. Only a confirmed helper-owned change can be
-// conditionally restored, and a new connection must read back its current level.
-// This read/compare/write is not atomic against other bridge administrators.
+// Bridge logging is global. An ACK confirms admission, not application.
+// A live (non-retained) bridge/info change and a separately reconnected
+// snapshot are both required to report a verified restoration.
 export async function recoverBridgeLogLevel(journal,device) {
     if(!/^0x[0-9a-f]{16}$/i.test(device?.ieee_address)) throw Error('Unsupported recovery target');
-    if(!BRIDGE_LEVELS.has(journal?.baseline) || !BRIDGE_LEVELS.has(journal?.confirmed) ||
+    if(!Array.isArray(journal?.allowedLevels) || !journal.allowedLevels.includes(journal.baseline) ||
+        !journal.allowedLevels.includes(journal.confirmed) ||
         typeof journal.uncertain!=='boolean') throw Error('Invalid bridge log recovery evidence');
-    if(journal.uncertain) return {status:'delivery_unknown'};
+    if(journal.uncertain || journal.phase!=='verified' || !journal.verified)
+        return {status:'delivery_unknown'};
     if(journal.confirmed===journal.baseline) return {status:'already_restored'};
     const artifacts=[];
     const read=async()=>{
         const {result,artifact}=await runChild('read-bridge-log-level',[],device.ieee_address);
         artifacts.push(artifact);
-        if(!result.completed || !BRIDGE_LEVELS.has(result.bridgeLogLevel?.value))
-            throw Error('Bridge log level was not freshly read');
-        return result.bridgeLogLevel.value;
+        const evidence=result.bridgeLogLevel;
+        if(!result.completed || !journal.allowedLevels.includes(evidence?.value) ||
+            evidence.version!==journal.bridgeVersion)
+            throw Error('Bridge log-level snapshot/schema/version not verified');
+        return evidence;
     };
     const before=await read();
-    if(before===journal.baseline) return {status:'already_restored',before,artifacts};
-    if(before!==journal.confirmed) return {status:'foreign_change',before,artifacts};
+    if(before.value===journal.baseline) {
+        // A retained broker snapshot alone cannot prove live restoration.
+        return {status:before.retained?'snapshot_only':'already_restored',before,artifacts};
+    }
+    if(before.value!==journal.confirmed) return {status:'foreign_change',before,artifacts};
     const {result,artifact}=await runChild('set-bridge-log-level',
         [journal.baseline,journal.confirmed],device.ieee_address);
     artifacts.push(artifact);
     if(!result.completed || result.bridgeLogLevel?.value!==journal.baseline ||
-        result.bridgeLogLevel?.expected!==journal.confirmed)
-        throw Error('Bridge log level restoration was not acknowledged');
+        result.bridgeLogLevel?.expected!==journal.confirmed ||
+        result.bridgeLogLevel?.version!==journal.bridgeVersion ||
+        result.bridgeLogLevel?.verifiedLive!==true)
+        throw Error('Bridge log-level restoration has no correlated live update');
     const after=await read();
-    if(after!==journal.baseline) throw Error('Bridge log level restoration did not persist');
-    return {status:'restored',before,after,artifacts};
+    if(after.value!==journal.baseline) throw Error('Independent bridge snapshot mismatched restoration');
+    return {status:'restored',before,after,verifiedLive:true,artifacts,
+        warning:'Read-compare-write is not atomic; external writers may race'};
 }
