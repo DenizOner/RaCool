@@ -105,7 +105,11 @@ silerek veya özel alan değiştirerek hata üretmeyin. Sınırlı temiz açıl�
 aralıklı kök nedenin kanıtı saymayın.
 
 `verify_zigbee_lifecycle.py` her servis restartından önce menü ve sistemin
-boşta olduğunu doğrular. Sonucu belirsiz bir restartta tek kontrollü kurtarma
+boşta olduğunu doğrular. Zigbee worker, son SDK okuru ayrıldıktan ve ana döngü
+çıktıktan sonra AF device/endpoint tanımlayıcılarını SDK deinit **öncesinde**
+bırakır; SDK kapandıktan sonra AF free çağrısı geçerli sayılmaz.
+Yerel native/target taklitlerinde sıra kontrolü gerçek SDK bellek kabulü değildir; üç
+ardışık yeniden başlatma ve ağ/ayar kalıcılığı gerçek kartta doğrulanmalıdır. Sonucu belirsiz bir restartta tek kontrollü kurtarma
 resetinden sonra gerçek boot ve reporting değerlerini denetler. Geri yükleme
 sırasındaki SDK hata satırları saklanır ve test başarısız kalır; Developer Mode
 tercihi mümkünse checked readback ile geri alınır. Fatal hata veya yabancı
