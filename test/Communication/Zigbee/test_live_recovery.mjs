@@ -183,7 +183,13 @@ for (const scenario of ['confirmed','foreign','uncertain','ack_only','retained_u
         const result=JSON.parse(await fs.readFile(
             path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
         assert.equal(result.completed,false,output);
-        assert.equal(result.transportClosedBeforeCompletion,true,output);
+        if(scenario==='missing_schema') {
+            // Reject before even starting an asynchronous MQTT mutation.
+            assert.match(result.operationError,/Missing authoritative bridge log-level schema/);
+            assert.equal(result.transportClosedBeforeCompletion,undefined,output);
+        } else {
+            assert.equal(result.transportClosedBeforeCompletion,true,output);
+        }
         const expected={
             confirmed:'restored',foreign:'foreign_change',uncertain:'delivery_unknown',
             ack_only:'delivery_unknown',retained_update:'delivery_unknown',
