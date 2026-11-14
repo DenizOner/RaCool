@@ -278,7 +278,7 @@ void test_DiagnosticsManager_PublicationsRunOutsideMutex(void) {
     testBus.Publish = TrackPublish;
     mocked_GetEventBus_fake.return_val = &testBus;
     locked = false; publishesUnderLock = criticalPublications = 0;
-    RunScan();
+    RunScan(false);
     TEST_ASSERT_EQUAL(0, publishesUnderLock);
     TEST_ASSERT_EQUAL(0, criticalPublications);
     TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
@@ -394,21 +394,122 @@ void test_DiagnosticsManager_ExplicitScanIsNotDeferred(void) {
     TEST_ASSERT_LESS_THAN(pdMS_TO_TICKS(1000), testTicks);
 }
 
+static TickType_t otherCheckAt;
+static bool RecordHealthyOther(void *unused) {
+    (void)unused;
+    otherCheckAt = testTicks;
+    return true;
+}
+static bool RestartDuringOtherCheck(void *unused) {
+    (void)unused;
+    readinessService.CheckHealth = Unhealthy;
+    return true;
+}
+
+void test_DiagnosticsManager_PeriodicChecksOthersBeforeZigbeeGrace(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    diagManager.customCheckCount = 1;
+    diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
+        .name = "Other", .check_fn = RecordHealthyOther
+    };
+    otherCheckAt = pdMS_TO_TICKS(40000);
+    TEST_ASSERT_FALSE(RunScan(true));
+    TEST_ASSERT_EQUAL(0, otherCheckAt);
+    TEST_ASSERT_TRUE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_TRUE(diagManager.scanPending);
+    TEST_ASSERT_FALSE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(2, diagManager.pendingResult.services_checked);
+    TEST_ASSERT_EQUAL(1, diagManager.pendingResult.services_healthy);
+    TEST_ASSERT_FALSE(CompletePeriodicZigbee(pdMS_TO_TICKS(300), false));
+    TEST_ASSERT_FALSE(diagManager.lastResult.completed);
+    readinessService.CheckHealth = Healthy;
+    TEST_ASSERT_TRUE(CompletePeriodicZigbee(pdMS_TO_TICKS(500), false));
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(2, diagManager.lastResult.services_checked);
+    TEST_ASSERT_EQUAL(2, diagManager.lastResult.services_healthy);
+    TEST_ASSERT_EQUAL(100, diagManager.lastResult.health_score);
+    TEST_ASSERT_EQUAL_STRING("", diagManager.lastResult.last_failed_service);
+}
+
+void test_DiagnosticsManager_PersistentOtherFailureNeverGetsHidden(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    diagManager.customCheckCount = 1;
+    diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
+        .name = "Other", .check_fn = sample_custom_check_fail
+    };
+    TEST_ASSERT_TRUE(RunScan(true));
+    TEST_ASSERT_FALSE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(2, diagManager.lastResult.services_checked);
+    TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
+}
+
+void test_DiagnosticsManager_ZigbeeRestartDuringOtherScanUsesGrace(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    readinessService.CheckHealth = Healthy;
+    diagManager.customCheckCount = 1;
+    diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
+        .name = "Restart", .check_fn = RestartDuringOtherCheck
+    };
+    TEST_ASSERT_FALSE(RunScan(true));
+    TEST_ASSERT_TRUE(diagManager.periodicZigbeePending);
+    readinessService.CheckHealth = Healthy;
+    TEST_ASSERT_TRUE(CompletePeriodicZigbee(pdMS_TO_TICKS(500), false));
+    TEST_ASSERT_EQUAL(100, diagManager.lastResult.health_score);
+}
+
+void test_DiagnosticsManager_ManualRequestInterruptsPendingGrace(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    TEST_ASSERT_FALSE(RunScan(true));
+    diagManager.state = SERVICE_STATE_STARTED;
+    IDiagnosticsManager *dm = DiagnosticsManager_GetModule();
+    TEST_ASSERT_EQUAL(DIAG_OK, dm->StartAsyncSelfTest(dm));
+    TEST_ASSERT_TRUE(diagManager.requested);
+    TEST_ASSERT_TRUE(CompletePeriodicZigbee(pdMS_TO_TICKS(100), true));
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
+    TEST_ASSERT_TRUE(diagManager.requested);
+    TEST_ASSERT_TRUE(RunScan(false));
+    TEST_ASSERT_FALSE(diagManager.requested);
+    TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
+}
+
 void test_DiagnosticsManager_PeriodicGraceIsWrapSafe(void) {
     setUp_DiagnosticsManager();
-    bool waiting = false;
-    TickType_t started = 0;
-    TickType_t now = (TickType_t)(~(TickType_t)0 - PositiveTicks(1000));
-    TEST_ASSERT_TRUE(DeferPeriodicScan(now, false, &waiting, &started));
-    TEST_ASSERT_TRUE(waiting);
-    TEST_ASSERT_TRUE(DeferPeriodicScan((TickType_t)(now + PositiveTicks(2000)),
-                                       false, &waiting, &started));
-    TEST_ASSERT_FALSE(DeferPeriodicScan((TickType_t)(now +
-        PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS)), false, &waiting, &started));
-    TEST_ASSERT_FALSE(DeferPeriodicScan((TickType_t)(now + PositiveTicks(35000)),
-                                        true, &waiting, &started));
-    TEST_ASSERT_FALSE(waiting);
+    ConfigureUnhealthyPeriodicZigbee();
+    testTicks = (TickType_t)(~(TickType_t)0 - PositiveTicks(1000));
+    TickType_t started = testTicks;
+    TEST_ASSERT_FALSE(RunScan(true));
+    TEST_ASSERT_FALSE(CompletePeriodicZigbee(
+        (TickType_t)(started + PositiveTicks(2000)), false));
+    TEST_ASSERT_FALSE(diagManager.lastResult.completed);
+    TEST_ASSERT_TRUE(CompletePeriodicZigbee(
+        (TickType_t)(started + PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS)), false));
+    TEST_ASSERT_FALSE(diagManager.periodicZigbeePending);
+    TEST_ASSERT_EQUAL(0, diagManager.lastResult.health_score);
+    TEST_ASSERT_EQUAL_STRING(SVC_NAME_ZIGBEE, diagManager.lastResult.last_failed_service);
 }
+
+static void ThermalGracePoll(TickType_t ticks) {
+    testTicks += ticks;
+    if (testTicks >= pdMS_TO_TICKS(1200)) atomic_store(&diagManager.stopRequested, true);
+}
+void test_DiagnosticsManager_ThermalEmergencyNotDelayedByZigbeeGrace(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    TEST_ASSERT_FALSE(RunScan(true));
+    RESET_FAKE(mocked_esp_restart);
+    mocked_vTaskDelay_fake.custom_fake = ThermalGracePoll;
+    atomic_store(&diagManager.emergency, true);
+    DiagnosticWorker(NULL);
+    TEST_ASSERT_GREATER_THAN(0, mocked_esp_restart_fake.call_count);
+    TEST_ASSERT_TRUE(atomic_load(&diagManager.exited));
+}
+
 
 void test_DiagnosticsManager_LateThermalCallbackKeepsWorkerAlive(void) {
     setUp_DiagnosticsManager();
@@ -454,7 +555,7 @@ void test_DiagnosticsManager_ScanAdmissionLockFailureRetainsRequestAndResult(voi
     DiagnosticsTestResult before = diagManager.lastResult;
     unsigned gives = mocked_xSemaphoreGive_fake.call_count;
     mocked_xSemaphoreTake_fake.return_val = pdFALSE;
-    TEST_ASSERT_FALSE(RunScan());
+    TEST_ASSERT_FALSE(RunScan(false));
     TEST_ASSERT_EQUAL_MEMORY(&before, &diagManager.lastResult, sizeof(before));
     TEST_ASSERT_TRUE(diagManager.requested);
     TEST_ASSERT_TRUE(diagManager.initialPending);
@@ -478,15 +579,15 @@ void test_DiagnosticsManager_CommitContentionRetainsResultWithoutRepeatingCallba
     diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
         .name = "Commit contention", .check_fn = complete_and_block_result_commit};
     completedCallbacks = 0;
-    TEST_ASSERT_FALSE(RunScan());
+    TEST_ASSERT_FALSE(RunScan(false));
     TEST_ASSERT_TRUE(diagManager.scanPending);
     TEST_ASSERT_TRUE(diagManager.lastResult.is_running);
     TEST_ASSERT_FALSE(diagManager.lastResult.completed);
     TEST_ASSERT_EQUAL(1, completedCallbacks);
-    TEST_ASSERT_FALSE(RunScan());
+    TEST_ASSERT_FALSE(RunScan(false));
     TEST_ASSERT_EQUAL(1, completedCallbacks);
     mocked_xSemaphoreTake_fake.return_val = pdTRUE;
-    TEST_ASSERT_TRUE(RunScan());
+    TEST_ASSERT_TRUE(RunScan(false));
     TEST_ASSERT_EQUAL(1, completedCallbacks);
     TEST_ASSERT_FALSE(diagManager.scanPending);
     TEST_ASSERT_TRUE(diagManager.lastResult.completed);
@@ -506,7 +607,7 @@ void test_DiagnosticsManager_ClosingScanNeverCommitsCompletedHealth(void) {
     diagManager.customCheckCount = 1;
     diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
         .name = "Closing", .check_fn = close_during_scan};
-    TEST_ASSERT_FALSE(RunScan());
+    TEST_ASSERT_FALSE(RunScan(false));
     TEST_ASSERT_FALSE(diagManager.scanPending);
     TEST_ASSERT_FALSE(diagManager.lastResult.completed);
     TEST_ASSERT_EQUAL(0, diagManager.lastResult.services_checked);
@@ -521,7 +622,7 @@ void test_DiagnosticsManager_StopDropsOnlyWorkerOwnedPendingResult(void) {
     diagManager.customCheckCount = 1;
     diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
         .name = "Pending stop", .check_fn = complete_and_block_result_commit};
-    TEST_ASSERT_FALSE(RunScan());
+    TEST_ASSERT_FALSE(RunScan(false));
     TEST_ASSERT_TRUE(diagManager.scanPending);
     mocked_xSemaphoreTake_fake.return_val = pdTRUE;
     IDiagnosticsManager *dm = DiagnosticsManager_GetModule();
