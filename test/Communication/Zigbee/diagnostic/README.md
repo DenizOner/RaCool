@@ -59,6 +59,22 @@ asla kör SET tekrarı yok. Bu bayrak **köprü log seviyesini değiştirmez** v
 socket'i kendisi koparan istemciyi etkiler; gizli broker parolaları, PAN/IEEE
 kimlikleri ve ham MQTT frame'leri açık kayda alınmaz.
 
+
+Ayrı, daha riskli **global köprü log seviyesi** kopma gözlemi için, önceden
+doğrulanmış canlı `bridge/info.config_schema` ve mevcut `info` benzeri baseline
+şartlarıyla, tek `verify`/tek rapor kontrolünde `RACOOL_REPORT_TRAFFIC=1` ve
+`RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG=1` kullanımı sadece istek ACK ve
+istekten sonraki **retained olmayan** gerçek `bridge/info` değer/sürüm
+güncellemesi birlikte doğrulandığında yalnız bu test istemcisinin TCP
+soketini keser. Recovery ayrı bağlantıyla önce değer/versiyon/kimlik,
+sonra koşullu restore için ACK + yeni canlı bilgi, en son başka bağlantıdan
+readback gerektirir. Bu flag de varsayılan OFF'tur; başka istemciler veya
+bridge/broker resetlenmez. Ancak `bridge/options` **global** ayardır ve
+karşılaştırma-yazma atomik değildir: yabancı yazıcı/unknown/ikinci kopmada
+otomatik tekrar SET yapılmaz, **BLOCKED** kaydedilir ve operatör son durumu
+güvenli yöntemle okur. Mutasyon öncesi baseline ve son durum doğrulanamıyorsa
+bayrağı **çalıştırmayın**. Bu simülasyonun PASS sonucu canlı köprü kabulü değildir.
+
 `RACOOL_ZIGBEE_REPORT_DIAGNOSTIC=ON`, yalnız geçici firmware'e
 `report_trace.c` dosyasını ve on linker wrapper'ını ekler. Varsayılan OFF'tur.
 PlatformIO `esp32-c6-zigbee-report-trace` ortamı bu seçeneği yalnız kendi

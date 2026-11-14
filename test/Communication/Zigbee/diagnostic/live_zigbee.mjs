@@ -337,6 +337,17 @@ async function applyBridgeLogLevel(level) {
     bridgeLogJournal.verified=true;
     bridgeLogJournal.phase='verified';
     bridgeLogJournal.uncertain=false;
+    /* Only the opted-in test process may interrupt its own MQTT socket
+     * after fresh non-retained evidence of a helper-owned bridge log change.
+     * Recovery child modes never match the guard below. */
+    if(mode==='verify' && process.env.RACOOL_REPORT_TRAFFIC==='1' &&
+        process.env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG==='1' &&
+        level!==bridgeLogJournal.baseline) {
+        seen.testClientDisconnect={phase:'verified_live_bridge_info'};
+        console.log('TEST_CLIENT_DISCONNECT_AFTER_VERIFIED_BRIDGE_INFO');
+        socket.destroy();
+        throw Error('Test-only client disconnect after verified bridge log mutation');
+    }
 }
 async function runFanSourceChecks() {
     const read=async attributes=>{

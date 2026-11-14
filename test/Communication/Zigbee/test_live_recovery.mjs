@@ -98,7 +98,7 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
 });
 
 
-for (const scenario of ['confirmed','foreign','uncertain','ack_only','retained_update',
+for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_only','retained_update',
     'restore_disconnect','post_restore_foreign','version_drift','missing_schema']) test(
     'bridge logging recovery after '+scenario+' MQTT disconnect', async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-log-recovery-'));
@@ -179,7 +179,10 @@ for (const scenario of ['confirmed','foreign','uncertain','ack_only','retained_u
             RACOOL_ZIGBEE_CONFIG:path.join(directory,'config.yaml'),
             RACOOL_LIVE_CONVERTER:path.join(directory,'unused.mjs'),
             RACOOL_DEVICE_IEEE:device.ieee_address,RACOOL_REPORT_TRAFFIC:'1'};
-        for(const key of ['RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE','RACOOL_RESULT_ID'])delete env[key];
+        for(const key of ['RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE',
+            'RACOOL_RESULT_ID','RACOOL_TEST_CUT_CLIENT_AFTER_WIRE',
+            'RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG'])delete env[key];
+        if(scenario==='controlled_cut')env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG='1';
         child=spawn(process.execPath,[helper,'verify',control],{cwd:directory,env});
         let output='';child.stdout.on('data',c=>output+=c);child.stderr.on('data',c=>output+=c);
         const exit=await new Promise((resolve,reject)=>{
@@ -199,25 +202,28 @@ for (const scenario of ['confirmed','foreign','uncertain','ack_only','retained_u
             assert.equal(result.transportClosedBeforeCompletion,true,output);
         }
         const expected={
-            confirmed:'restored',foreign:'foreign_change',uncertain:'delivery_unknown',
+            confirmed:'restored',controlled_cut:'restored',
+            foreign:'foreign_change',uncertain:'delivery_unknown',
             ack_only:'delivery_unknown',retained_update:'delivery_unknown',
             restore_disconnect:'failed',post_restore_foreign:'failed',
             version_drift:'failed',missing_schema:undefined
         }[scenario];
         assert.equal(result.bridgeLogRecovery?.status,expected,output);
-        if(scenario==='confirmed') {
+        if(['confirmed','controlled_cut'].includes(scenario)) {
             assert.equal(result.bridgeLogRecovery.verifiedLive,true,output);
             assert.equal(result.bridgeLogRecovery.after.value,'info',output);
             assert.equal(result.bridgeLogRecovery.after.retained,true,output);
         }
+        if(scenario==='controlled_cut')
+            assert.equal(result.testClientDisconnect?.phase,'verified_live_bridge_info',output);
         assert.deepEqual(writes,
             scenario==='missing_schema'?[]:
-            ['confirmed','restore_disconnect','post_restore_foreign'].includes(scenario)
+            ['confirmed','controlled_cut','restore_disconnect','post_restore_foreign'].includes(scenario)
                 ?['debug','info']:['debug']);
         assert.equal(level,
             scenario==='missing_schema'?'info':
             scenario==='foreign'||scenario==='post_restore_foreign'?'warning':
-            ['confirmed','restore_disconnect'].includes(scenario)?'info':'debug');
+            ['confirmed','controlled_cut','restore_disconnect'].includes(scenario)?'info':'debug');
     } finally{
         child?.kill();for(const socket of clients)socket.destroy();
         await new Promise(resolve=>server.close(resolve));
