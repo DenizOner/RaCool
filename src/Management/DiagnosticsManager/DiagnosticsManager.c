@@ -242,11 +242,15 @@ static bool RunScan(bool periodic) {
     diagManager.pendingHeapWarning = heapWarning;
     diagManager.pendingFreeHeap = freeHeap;
     diagManager.scanPending = true;
-    /* When only Zigbee is temporarily failing, keep the complete result
-     * pending; never publish an incomplete/fake 100% health snapshot.
-     * Failures in any other service, custom check or heap publish at once. */
+    /* The heap warning is independent of Zigbee's transient health.
+     * Publish genuine memory pressure now, without publishing a partial
+     * Zigbee score. Keep the original memory thresholds unchanged. */
     if (periodicZigbee && result.services_checked &&
-        result.services_healthy + 1 == result.services_checked && !heapWarning) {
+        result.services_healthy + 1 == result.services_checked) {
+        if (heapWarning) {
+            PublishEvent(EVENT_DIAG_HEAP_WARNING, EVENT_TYPE_WARNING, &freeHeap, sizeof(freeHeap));
+            diagManager.pendingHeapWarning = false; /* Already emitted; never duplicate at commit. */
+        }
         atomic_store(&diagManager.periodicZigbeePending, true);
         diagManager.periodicZigbeeStarted = xTaskGetTickCount();
         diagManager.periodicZigbeeLastProbe = diagManager.periodicZigbeeStarted;
