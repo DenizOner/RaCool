@@ -86,7 +86,7 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
         assert.doesNotMatch(output,/FAKE_SECRET_BACKUP_ARCHIVE_MUST_NOT_LEAK/);
         const result=JSON.parse(await fs.readFile(path.join(directory,'test/build/zigbee-live-verify.json'),'utf8'));
         assert.doesNotMatch(JSON.stringify(result),/FAKE_SECRET_BACKUP_ARCHIVE_MUST_NOT_LEAK/);
-        assert.equal(result.responses?.some(response=>Object.hasOwn(response,'data')),false);
+        assert.equal(result.responses?.some(response=>Object.hasOwn(response,'data')) ?? false,false);
         assert.equal(result.completed,false);assert.equal(result.transportClosedBeforeCompletion,true);
         assert.equal(result.recovery?.status,{confirmed:'restored',controlled_cut:'restored',foreign:'foreign_change',
             uncertain:'delivery_unknown',identity:'failed',reconfigure:undefined}[scenario],output);
