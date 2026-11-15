@@ -12,9 +12,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char *TAG = "OtaBootRecovery";
+#if !defined(CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE) && \
+    !defined(RACOOL_TARGET_TESTING) && !defined(RACOOL_TEST_NATIVE)
+#error "Production OTA boot health gate requires CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE"
+#endif
 
 #if defined(CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE)
+static const char *TAG = "OtaBootRecovery";
 #define OTA_BOOT_HEALTH_POLL_MS 500u
 #define OTA_BOOT_HEALTH_MAX_SAMPLES 6u
 #define OTA_BOOT_HEALTH_REQUIRED_CONSECUTIVE 2u
