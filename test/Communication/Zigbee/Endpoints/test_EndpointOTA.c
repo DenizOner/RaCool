@@ -114,6 +114,23 @@ void test_EndpointOTA_HandleAction_Progress(void) {
     }
 }
 
+void test_EndpointOTA_SeparateAttemptsReportErrors(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START}
+    };
+    for (unsigned i = 0; i < 2u; ++i) {
+        esp_err_t status = ESP_OK;
+        msg.out.result = EZB_ZCL_STATUS_SUCCESS;
+        TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID,
+                                          &msg, &status));
+        TEST_ASSERT_EQUAL(ESP_ERR_NOT_SUPPORTED, status);
+        TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+        TEST_ASSERT_EQUAL(i + 1u, otaErrorEvents);
+        TEST_ASSERT_EQUAL(0, otaCompleteEvents);
+    }
+}
+
 void test_EndpointOTA_AbortAndUnknownProgress(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
     ezb_zcl_ota_upgrade_client_progress_message_t msg = {
@@ -215,6 +232,7 @@ void test_EndpointOTA_All(void) {
     RUN_TEST(test_EndpointOTA_RegisterClusters);
     RUN_TEST(test_EndpointOTA_HandleAction_Progress);
     RUN_TEST(test_EndpointOTA_AbortAndUnknownProgress);
+    RUN_TEST(test_EndpointOTA_SeparateAttemptsReportErrors);
 }
 
 #ifndef RACOOL_TARGET_TESTING
