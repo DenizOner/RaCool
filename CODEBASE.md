@@ -108,6 +108,8 @@ The common engine is elapsed-time based, nonblocking and wrap-safe. Color/bright
 
 PowerManager applies checked esp_pm_configure CPU profiles independently of radio TX. Router operation retains automatic light_sleep_enable=false; explicit deep sleep disables the radio. Wake/reset cause, OLED wake and actual electrical power are distinct. Recovery and watchdog workers use bounded ownership/stop acknowledgment; the shared esp_timer dispatcher is not registered as a watched task.
 
+The production bootloader enables ESP-IDF application rollback. A newly installed image remains `PENDING_VERIFY` until the normal startup path completes and the OTA recovery gate confirms two consecutive checks of persistent ConfigurationManager snapshot and critical service readiness (relay, infrared worker, ClimateController, Zigbee task and watchdog health). Zigbee RF association and a single MLX sample are not first-boot prerequisites. Failure requests rollback only when ESP-IDF reports a bootable fallback; unknown boot state or missing fallback is not treated as success. This gate runs only for pending OTA images, never changes NVS/network identity or a relay output, and requires a real device boot/rollback test before physical acceptance.
+
 ## Verification entry points
 
 [Test layout](test/README.md), [native manifest](test/native_suites.json) and [target manifest](test/target_suites.json) are authoritative test navigation. Module-specific diagnostic helpers live beside their tests; inspect their argument parser and restoration contract before use. Logs/JSON go under ignored test/build, not documentation instruction files.

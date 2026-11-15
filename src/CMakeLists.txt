@@ -44,7 +44,7 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../tools/product_resources.cmake")
 idf_component_register(SRCS ${app_sources} ${RACOOL_RESOURCE_SOURCES}
                        INCLUDE_DIRS "." "../include" "${RACOOL_RESOURCE_OUTPUT}" "${RACOOL_VERSION_OUTPUT}"
-                       REQUIRES nvs_flash esp_event freertos log esp_common esp_system esp_timer driver esp_rom console espressif__esp-zigbee-lib espressif__esp-zboss-lib joltwallet__littlefs espressif__led_strip esp_driver_rmt esp_driver_pcnt esp_driver_i2s esp_adc esp_driver_gptimer esp_driver_tsens)
+                       REQUIRES app_update nvs_flash esp_event freertos log esp_common esp_system esp_timer driver esp_rom console espressif__esp-zigbee-lib espressif__esp-zboss-lib joltwallet__littlefs espressif__led_strip esp_driver_rmt esp_driver_pcnt esp_driver_i2s esp_adc esp_driver_gptimer esp_driver_tsens)
 
 # ESP-IDF owns newlib syscalls and per-task reentrancy; no application overrides.
 

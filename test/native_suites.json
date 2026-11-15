@@ -1,5 +1,9 @@
 [
   {
+    "name": "OtaBootRecovery",
+    "file": "test/Core/SystemInitializer/test_OtaBootRecovery.c"
+  },
+  {
     "name": "SystemInitializerStartup",
     "file": "test/Core/SystemInitializer/test_SystemInitializerStartup.c",
     "generateRunner": true
