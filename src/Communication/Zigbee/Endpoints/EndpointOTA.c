@@ -2,6 +2,7 @@
 #include "Communication/Zigbee/Endpoints/EndpointOTA.h"
 #include "Communication/Zigbee/Endpoints/EndpointCommon.h"
 #include "Communication/Zigbee/ZigbeeConfig.h"
+#include "Core/EventBus/IEventBus.h"
 #include "Core/ServiceLocator/ServiceLocator.h"
 #include "esp_zigbee.h"
 #include "Management/ConfigurationManager/IConfigurationManager.h"
@@ -20,6 +21,22 @@ typedef struct {
 
 static EndpointOTA otaInstance;
 static const char *TAG_OTA = "EndpointOTA";
+
+static void PublishOtaError(void) {
+    IEventBus *bus = ServiceLocator_GetEventBus();
+    if (bus && bus->Publish)
+        bus->Publish((BusEvent){.eventName = "ota_error", .type = EVENT_TYPE_ERROR});
+}
+
+static void RejectUnimplementedOta(EndpointOTA *ota) {
+    /* Preserve the existing error event, but publish it only once per failed
+     * transfer. Never publish ota_complete without verified flash/boot state. */
+    bool firstFailure = ota->state != OTA_STATE_ERROR;
+    ota->state = OTA_STATE_ERROR;
+    ota->bytesReceived = 0;
+    ota->totalSize = 0;
+    if (firstFailure) PublishOtaError();
+}
 
 static const char *OTA_GetName(IZigbeeEndpoint *self) { return "OTAUpgradeEndpoint"; }
 static uint8_t OTA_GetEndpointId(IZigbeeEndpoint *self) { return ((EndpointOTA *)self)->endpoint_id; }
@@ -147,26 +164,20 @@ static bool OTA_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callback
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK:
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY:
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_FINISH:
-        ota->state = OTA_STATE_ERROR;
-        ota->bytesReceived = 0;
-        ota->totalSize = 0;
+        RejectUnimplementedOta(ota);
         *ret_status = ESP_ERR_NOT_SUPPORTED;
         msg->out.result = EZB_ZCL_STATUS_ABORT;
         return true;
 
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT:
         /* Acknowledge cancellation only, never successful installation. */
-        ota->state = OTA_STATE_ERROR;
-        ota->bytesReceived = 0;
-        ota->totalSize = 0;
+        RejectUnimplementedOta(ota);
         *ret_status = ESP_OK;
         msg->out.result = EZB_ZCL_STATUS_SUCCESS;
         return true;
 
     default:
-        ota->state = OTA_STATE_ERROR;
-        ota->bytesReceived = 0;
-        ota->totalSize = 0;
+        RejectUnimplementedOta(ota);
         *ret_status = ESP_ERR_INVALID_ARG;
         msg->out.result = EZB_ZCL_STATUS_ABORT;
         return true;
