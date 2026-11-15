@@ -75,19 +75,56 @@ void test_EndpointOTA_RegisterClusters(void) {
 
 void test_EndpointOTA_HandleAction_Progress(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
-    esp_err_t status = ESP_FAIL;
-    
-    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
-        .in = {
-            .progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
-            .start = { .image_size = 500000 }
-        }
+    ezb_zcl_ota_upgrade_client_progress_message_t messages[] = {
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_RECEIVING}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_FINISH}},
     };
-    
-    bool handled = ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status);
-    
-    TEST_ASSERT_TRUE(handled);
+
+    /* No flash writer is registered: all transfer phases must fail closed,
+     * even if progress is received out of order or the counters are stale. */
+    for (size_t i = 0; i < sizeof(messages) / sizeof(messages[0]); ++i) {
+        esp_err_t status = ESP_OK;
+        otaInstance.state = OTA_STATE_DOWNLOADING;
+        otaInstance.bytesReceived = UINT32_MAX;
+        otaInstance.totalSize = 500000;
+        messages[i].out.result = EZB_ZCL_STATUS_SUCCESS;
+        TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID,
+                                          &messages[i], &status));
+        TEST_ASSERT_EQUAL(ESP_ERR_NOT_SUPPORTED, status);
+        TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, messages[i].out.result);
+        TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
+        TEST_ASSERT_EQUAL_UINT32(0, otaInstance.bytesReceived);
+        TEST_ASSERT_EQUAL_UINT32(0, otaInstance.totalSize);
+    }
+}
+
+void test_EndpointOTA_AbortAndUnknownProgress(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT}
+    };
+    otaInstance.state = OTA_STATE_DOWNLOADING;
+    otaInstance.bytesReceived = 1024;
+    otaInstance.totalSize = 500000;
+    esp_err_t status = ESP_FAIL;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_OK, status);
+    /* Successful cancellation acknowledgment is NOT a successful update. */
     TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_SUCCESS, msg.out.result);
+    TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
+    TEST_ASSERT_EQUAL_UINT32(0, otaInstance.bytesReceived);
+    TEST_ASSERT_EQUAL_UINT32(0, otaInstance.totalSize);
+
+    msg.in.progress = 0xff;
+    msg.out.result = EZB_ZCL_STATUS_SUCCESS;
+    status = ESP_OK;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
 }
 
 void test_EndpointOTA_ProfileValidationAndErrors(void) {
@@ -162,6 +199,7 @@ void test_EndpointOTA_All(void) {
     RUN_TEST(test_EndpointOTA_Identification);
     RUN_TEST(test_EndpointOTA_RegisterClusters);
     RUN_TEST(test_EndpointOTA_HandleAction_Progress);
+    RUN_TEST(test_EndpointOTA_AbortAndUnknownProgress);
 }
 
 #ifndef RACOOL_TARGET_TESTING
