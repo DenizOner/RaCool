@@ -576,6 +576,19 @@ static void zb_action_handler(ezb_zcl_core_action_callback_id_t callback_id, voi
   if (!message) return;
   ezb_zcl_set_attr_value_message_t *attribute_message =
       callback_id == EZB_ZCL_CORE_SET_ATTR_VALUE_CB_ID ? message : NULL;
+  ezb_zcl_ota_upgrade_client_progress_message_t *ota_progress =
+      callback_id == EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID ? message : NULL;
+  ezb_zcl_ota_upgrade_query_next_image_rsp_message_t *ota_query =
+      callback_id == EZB_ZCL_CORE_OTA_UPGRADE_QUERY_NEXT_IMAGE_RSP_CB_ID ? message : NULL;
+  /*
+   * SDK 2.0.5 consumes these out.result fields when the callback returns.
+   * The service lock may be unavailable during Stop/rejoin. Initialize the
+   * rejection *before* taking it: stale SUCCESS must never acknowledge an
+   * unwritten OTA block or authorize an image query when no owner handled it.
+   * An endpoint may deliberately override the result after actual work.
+   */
+  if (ota_progress) ota_progress->out.result = EZB_ZCL_STATUS_ABORT;
+  if (ota_query) ota_query->out.result = EZB_ZCL_STATUS_ABORT;
   if (atomic_load(&zigbeeService.closing) || !zb_take_mutex(pdMS_TO_TICKS(50))) {
     if (attribute_message) attribute_message->out.result = EZB_ZCL_STATUS_FAIL;
     return;

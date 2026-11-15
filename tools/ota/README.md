@@ -99,3 +99,22 @@ app image. Exact file offset, app size and final block are enforced before
 image writer verification; a failed transfer attempts backend cleanup. This
 code is **not called from the Zigbee callback** until an asynchronous worker
 can return *actual completed write results* without holding SDK locks.
+
+
+## SDK callback response safety (fail closed)
+
+The pinned SDK's progress and Query Next Image callbacks consume
+`out.result` synchronously on return. The Zigbee router initializes both
+results to `EZB_ZCL_STATUS_ABORT` **before** acquiring the service lock:
+contention, Stop, and an absent handler cannot accidentally carry a stale
+`SUCCESS`. EP10 may explicitly acknowledge cancellation only; file transfer
+stages remain rejected. Test cases in `test_Zigbee.c` cover lock contention,
+closing lifecycle, absent handler, query response and explicit cancel.
+
+The official SDK 2.0.5 client example writes in the synchronous progress
+callback. RaCool does **not** borrow that pattern: callback-time multi-MiB
+flash erase and signature checking can hold the SDK mainloop, affect routing
+and miss watchdog deadlines. A queued block alone cannot be treated as
+written, and the SDK does not expose a verified deferred-ACK API in the
+example. Until a bounded completion/response method is proven at the real
+SDK/device boundary, no flash worker is connected or transfer enabled.
