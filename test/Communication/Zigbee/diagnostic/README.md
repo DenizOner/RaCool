@@ -44,6 +44,14 @@ Yardımcının kendi RPC isteğine ait `response.error` da güvenilmezdir:
 hata ayrıntısı yalnız sabit redaksiyon mesajıyla döner, konsola ve
 artefaktlara ham köprü hata metni aktarılmaz.
 Hiçbir kayıtta tam bridge/info config'i, sır veya ağ kimliği yayınlanmaz.
+Normal test akışındaki `finally` geri yüklemesi dahil, her yeni global log yazımı
+öncesinde yardımcının son doğruladığı değerle **en son retained olmayan canlı
+bridge/info** değer/sürümü yeniden karşılaştırılır. Yabancı değişiklik veya
+retained-only son gözlem varsa yardımcı başka bir yöneticinin ayarını ezmez,
+yazmayı reddeder ve kabulü başarısız sayar. Kurtarmanın ayrı bağlantıyla yaptığı
+**son** okuma da retained olmayan taze bilgi içermelidir; yalnız retained ise
+`final_snapshot_unverified` döner, `restored` veya PASS yazılmaz. Bu durumda
+bir daha kör geri yazma yapılmaz.
 Köprü genelinde compare-and-swap/atomik koruma yoktur; iki okuma arasında başka
 bir yönetici yazabilir ve mutlak kalıcılık kanıtlanamaz.
 Diğer ayarlar için ayrı bağlantıda otomatik kurtarma yoktur. Belirsiz

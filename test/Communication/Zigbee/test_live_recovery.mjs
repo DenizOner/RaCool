@@ -107,7 +107,9 @@ for(const [scenario,kind,endpoint,attribute,suffix] of [
 for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_only','retained_update',
     'restore_disconnect','post_restore_foreign','version_drift','missing_schema',
     'retained_baseline','already_debug','invalid_cut_flags',
-    'retained_recovery','stale_retained_foreign','retained_restore_child']) test(
+    'retained_recovery','stale_retained_foreign','retained_restore_child',
+    'retained_final','stale_retained_final_foreign',
+    'normal_foreign','normal_stale_retained']) test(
     'bridge logging recovery after '+scenario+' MQTT disconnect', async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'racool-log-recovery-'));
     const control='report_interval_radiator_s',property=control+'_climate';
@@ -136,7 +138,11 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
                 const n=body.readUInt16BE(2),topic=body.subarray(4,4+n).toString();
                 if(topic==='zigbee2mqtt/bridge/info') {
                     if(scenario==='post_restore_foreign' && connections>=4) level='warning';
-                    if((scenario==='stale_retained_foreign' && connections===2) ||
+                    if(scenario==='stale_retained_final_foreign' && connections>=4) {
+                        level='warning';
+                        const stale={...bridgeInfo(),config:{advanced:{log_level:'info'}}};
+                        publish(socket,topic,stale,true);
+                    } else if((scenario==='stale_retained_foreign' && connections===2) ||
                         (scenario==='retained_restore_child' && connections===3)) {
                         // The real bridge changed externally, but the retained
                         // broker snapshot still advertises our old 'debug'.
@@ -149,7 +155,8 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
                         // original connection and normal recovery read/write
                         // children, but never on stale/retained-only fixtures.
                         if((initial && scenario!=='retained_baseline') ||
-                            (!initial && connections<=3 && scenario!=='retained_recovery'))
+                            (!initial && scenario!=='retained_recovery' &&
+                                (connections<=3 || (connections===4 && scenario!=='retained_final'))))
                             publish(socket,topic,bridgeInfo(),false);
                     }
                 }
@@ -183,7 +190,19 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
                 }
                 if(initial&&topic==='zigbee2mqtt/bridge/request/device/reporting/read'){
                     if(scenario==='foreign')level='warning';
-                    socket.destroy();
+                    if(['normal_foreign','normal_stale_retained'].includes(scenario)) {
+                        // The first log change was applied; the normal finally
+                        // must not overwrite an externally changed log level.
+                        level='warning';
+                        if(scenario==='normal_foreign')
+                            publish(socket,'zigbee2mqtt/bridge/info',bridgeInfo(),false);
+                        else {
+                            const stale={...bridgeInfo(),config:{advanced:{log_level:'debug'}}};
+                            publish(socket,'zigbee2mqtt/bridge/info',stale,true);
+                        }
+                        publish(socket,'zigbee2mqtt/bridge/response/device/reporting/read',
+                            {status:'error',transaction:payload.transaction,error:'synthetic fixture rejection'});
+                    } else socket.destroy();
                 }
             }
         }});
@@ -230,6 +249,10 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
             assert.match(result.operationError,expectedMessage,output);
             assert.equal(result.transportClosedBeforeCompletion,undefined,output);
             assert.equal(result.testClientDisconnect,undefined,output);
+        } else if(['normal_foreign','normal_stale_retained'].includes(scenario)) {
+            assert.equal(result.transportClosedBeforeCompletion,undefined,output);
+            assert.match(result.operationError,
+                /Bridge log level changed or fresh live evidence lost; no global writes/,output);
         } else {
             assert.equal(result.transportClosedBeforeCompletion,true,output);
         }
@@ -241,7 +264,10 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
             version_drift:'failed',missing_schema:undefined,
             retained_baseline:undefined,already_debug:undefined,invalid_cut_flags:undefined,
             retained_recovery:'snapshot_only',stale_retained_foreign:'snapshot_only',
-            retained_restore_child:'failed'
+            retained_restore_child:'failed',
+            retained_final:'final_snapshot_unverified',
+            stale_retained_final_foreign:'final_snapshot_unverified',
+            normal_foreign:'foreign_change',normal_stale_retained:'foreign_change'
         }[scenario];
         assert.equal(result.bridgeLogRecovery?.status,expected,output);
         if(['retained_recovery','stale_retained_foreign'].includes(scenario)) {
@@ -250,21 +276,24 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
         }
         if(scenario==='retained_restore_child')
             assert.match(result.bridgeLogRecovery.error,/Recovery session failed/,output);
-        if(['confirmed','controlled_cut'].includes(scenario)) {
+        if(['confirmed','controlled_cut','retained_final','stale_retained_final_foreign'].includes(scenario)) {
             assert.equal(result.bridgeLogRecovery.verifiedLive,true,output);
             assert.equal(result.bridgeLogRecovery.after.value,'info',output);
-            assert.equal(result.bridgeLogRecovery.after.retained,true,output);
+            assert.equal(result.bridgeLogRecovery.after.retained,
+                !['confirmed','controlled_cut'].includes(scenario),output);
         }
         if(scenario==='controlled_cut')
             assert.equal(result.testClientDisconnect?.phase,'verified_live_bridge_info',output);
         assert.deepEqual(writes,
             ['missing_schema','retained_baseline','already_debug','invalid_cut_flags'].includes(scenario)?[]:
-            ['confirmed','controlled_cut','restore_disconnect','post_restore_foreign'].includes(scenario)
+            ['confirmed','controlled_cut','restore_disconnect','post_restore_foreign',
+                'retained_final','stale_retained_final_foreign'].includes(scenario)
                 ?['debug','info']:['debug']);
         assert.equal(level,
             scenario==='already_debug'?'debug':
             ['missing_schema','retained_baseline','invalid_cut_flags'].includes(scenario)?'info':
-            ['foreign','post_restore_foreign','stale_retained_foreign','retained_restore_child'].includes(scenario)?'warning':
+            ['foreign','post_restore_foreign','stale_retained_foreign','retained_restore_child',
+                'stale_retained_final_foreign','normal_foreign','normal_stale_retained'].includes(scenario)?'warning':
             ['confirmed','controlled_cut','restore_disconnect'].includes(scenario)?'info':'debug');
     } finally{
         child?.kill();for(const socket of clients)socket.destroy();

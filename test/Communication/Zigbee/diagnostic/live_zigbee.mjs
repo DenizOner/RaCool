@@ -353,6 +353,12 @@ async function applyBridgeLogLevel(level) {
     if(bridgeLogJournal.uncertain)
         throw Error('Unknown bridge log delivery; no blind write');
     if(bridgeLogJournal.confirmed===level) return;
+    // Revalidate even for normal finally cleanup: another administrator may
+    // have changed the global value after our last verified update.
+    const current=seen.bridgeInfo;
+    if(current?.retained!==false || current.level!==bridgeLogJournal.confirmed ||
+        current.version!==bridgeLogJournal.bridgeVersion)
+        throw Error('Bridge log level changed or fresh live evidence lost; no global writes');
     if(socket.destroyed || !socket.writable) throw Error('Bridge connection closed before log change');
     const sequence=seen.bridgeInfoSequence;
     bridgeLogJournal.requested=level;

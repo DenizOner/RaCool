@@ -103,6 +103,10 @@ export async function recoverBridgeLogLevel(journal,device) {
         throw Error('Bridge log-level restoration has no correlated live update');
     const after=await read();
     if(after.value!==journal.baseline) throw Error('Independent bridge snapshot mismatched restoration');
+    // The child observed application, but a retained final snapshot cannot
+    // independently prove the current bridge value after reconnection.
+    if(after.retained!==false) return {status:'final_snapshot_unverified',before,after,
+        verifiedLive:true,artifacts};
     return {status:'restored',before,after,verifiedLive:true,artifacts,
         warning:'Read-compare-write is not atomic; external writers may race'};
 }
