@@ -33,7 +33,8 @@ esp_err_t OtaImageStream_Start(OtaImageStream *stream,
 
 esp_err_t OtaImageStream_Consume(OtaImageStream *stream, uint32_t offset,
                                   const uint8_t *data, uint32_t length) {
-    if (!stream || !stream->active || stream->failed ||
+    if (!stream) return ESP_ERR_INVALID_ARG;
+    if (!stream->active || stream->failed ||
         stream->verified || stream->selected) return ESP_ERR_INVALID_STATE;
     if (!OtaImagePolicy_AcceptBlock(stream->next_offset, offset, data, length,
                                     stream->offer.file_size))
@@ -79,7 +80,8 @@ esp_err_t OtaImageStream_Consume(OtaImageStream *stream, uint32_t offset,
 }
 
 esp_err_t OtaImageStream_Check(OtaImageStream *stream) {
-    if (!stream || !stream->active || stream->failed ||
+    if (!stream) return ESP_ERR_INVALID_ARG;
+    if (!stream->active || stream->failed ||
         !stream->begun || stream->verified || stream->selected)
         return ESP_ERR_INVALID_STATE;
     if (stream->next_offset != stream->offer.file_size ||
@@ -92,7 +94,8 @@ esp_err_t OtaImageStream_Check(OtaImageStream *stream) {
 }
 
 esp_err_t OtaImageStream_Apply(OtaImageStream *stream) {
-    if (!stream || !stream->active || stream->failed ||
+    if (!stream) return ESP_ERR_INVALID_ARG;
+    if (!stream->active || stream->failed ||
         !stream->verified || stream->selected) return ESP_ERR_INVALID_STATE;
     esp_err_t result = stream->ops.select_boot(stream->ctx);
     if (result != ESP_OK) return StreamFail(stream, result);
@@ -101,7 +104,8 @@ esp_err_t OtaImageStream_Apply(OtaImageStream *stream) {
 }
 
 esp_err_t OtaImageStream_Cancel(OtaImageStream *stream) {
-    if (!stream || !stream->active || stream->selected) return ESP_ERR_INVALID_STATE;
+    if (!stream) return ESP_ERR_INVALID_ARG;
+    if (!stream->active || stream->selected) return ESP_ERR_INVALID_STATE;
     if (stream->begun) {
         esp_err_t result = stream->ops.abort(stream->ctx);
         if (result != ESP_OK) {

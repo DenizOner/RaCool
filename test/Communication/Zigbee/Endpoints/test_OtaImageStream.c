@@ -161,6 +161,9 @@ void test_Stream_RejectNullBadInputs(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Start(NULL,&policy,&offer,&ops,&stream));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Consume(&stream,0,file,3u));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Cancel(NULL));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Check(NULL));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Apply(NULL));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Consume(NULL,0,file,3u));
     TEST_ASSERT_EQUAL(ESP_OK,start());
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Consume(&stream,0,NULL,3u));
 }
