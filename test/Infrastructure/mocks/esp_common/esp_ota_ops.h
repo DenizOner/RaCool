@@ -2,7 +2,15 @@
 #define RACOOL_MOCK_ESP_OTA_OPS_H
 #include "esp_err.h"
 #include <stdbool.h>
-typedef struct esp_partition_t { int sentinel; } esp_partition_t;
+#include <stddef.h>
+typedef struct esp_partition_t { unsigned int size; int sentinel; } esp_partition_t;
+typedef unsigned int esp_ota_handle_t;
+const esp_partition_t *esp_ota_get_next_update_partition(const esp_partition_t *);
+esp_err_t esp_ota_begin(const esp_partition_t *, size_t, esp_ota_handle_t *);
+esp_err_t esp_ota_write(esp_ota_handle_t, const void *, size_t);
+esp_err_t esp_ota_end(esp_ota_handle_t);
+esp_err_t esp_ota_set_boot_partition(const esp_partition_t *);
+esp_err_t esp_ota_abort(esp_ota_handle_t);
 typedef enum {
     ESP_OTA_IMG_NEW = 0, ESP_OTA_IMG_PENDING_VERIFY,
     ESP_OTA_IMG_VALID, ESP_OTA_IMG_INVALID,

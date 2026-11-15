@@ -64,3 +64,26 @@ Sources (pinned version):
 - ESP-IDF v5.3.1 Secure Boot V2 / Signed App Verification Without Hardware
   Secure Boot documentation
 - ESP Zigbee SDK 2.0.5 `examples/ota_upgrade/ota_client/main`
+
+
+## ESP-IDF image-writer implementation boundary
+
+`OtaImageWriter` now provides the real `esp_ota_begin`, `esp_ota_write`,
+`esp_ota_end`, `esp_ota_set_boot_partition` and `esp_ota_abort` calls.
+It compiles into a non-mutating `ESP_ERR_NOT_SUPPORTED` backend unless the
+generated ESP-IDF configuration confirms software signed-app RSA verification
+on update **and** bootloader rollback. A host-only test flag exercises the
+signed path with fake ESP-IDF operations; those tests do not modify flash
+or validate a genuine RSA signature.
+
+The Zigbee progress callback deliberately does not invoke this writer.
+Long partition erases and flash writes must be owned by a bounded worker
+outside Zigbee SDK locks, and the callback must not acknowledge each block as
+written until the actual worker operation has finished. The writer's verified
+state is not Zigbee RF delivery or a completed reboot. No forced restart
+is performed. Its `Verify` call delegates firmware/signature checks to
+ESP-IDF's `esp_ota_end` only when signature policy is enabled.
+
+The signed-base bootstrap, safe worker handoff, stream-to-image boundary,
+last-block/power-loss tests, OTA server interoperability and actual signed
+image cryptographic verification on hardware remain acceptance blockers.

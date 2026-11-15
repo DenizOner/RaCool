@@ -1,5 +1,9 @@
 [
   {
+    "name": "OtaImageWriter",
+    "file": "test/Communication/Zigbee/Endpoints/test_OtaImageWriter.c"
+  },
+  {
     "name": "OtaImagePolicy",
     "file": "test/Communication/Zigbee/Endpoints/test_OtaImagePolicy.c"
   },
