@@ -294,7 +294,7 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
             ['missing_schema','retained_baseline','invalid_cut_flags'].includes(scenario)?'info':
             ['foreign','post_restore_foreign','stale_retained_foreign','retained_restore_child',
                 'stale_retained_final_foreign','normal_foreign','normal_stale_retained'].includes(scenario)?'warning':
-            ['confirmed','controlled_cut','restore_disconnect'].includes(scenario)?'info':'debug');
+            ['confirmed','controlled_cut','restore_disconnect','retained_final'].includes(scenario)?'info':'debug');
     } finally{
         child?.kill();for(const socket of clients)socket.destroy();
         await new Promise(resolve=>server.close(resolve));
