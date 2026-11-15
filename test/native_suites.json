@@ -755,6 +755,7 @@
     "name": "EndpointRegistration",
     "file": "test/Communication/Zigbee/Endpoints/test_EndpointRegistration.c",
     "sources": [
+      "src/Communication/Zigbee/Endpoints/OtaImagePolicy.c",
       "test/Communication/Zigbee/test_zigbee_fakes.c",
       "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
       "src/Hardware/RGBLED/RGBLEDColorEngine.c",
