@@ -1,5 +1,9 @@
 [
   {
+    "name": "OtaImageWriterUnsigned",
+    "file": "test/Communication/Zigbee/Endpoints/test_OtaImageWriterUnsigned.c"
+  },
+  {
     "name": "OtaImageStream",
     "file": "test/Communication/Zigbee/Endpoints/test_OtaImageStream.c"
   },
