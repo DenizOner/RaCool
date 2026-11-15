@@ -19,24 +19,29 @@ static void W32(uint8_t *p, uint32_t value) {
 void setUp(void) {
     offer = (OtaImageOffer){.manufacturer = policy.manufacturer,
         .image_type = policy.image_type, .version = policy.current_version + 1u,
-        .file_size = 63u};
+        .file_size = 67u};
     memset(prefix, 0, sizeof(prefix));
     W32(prefix, 0x0BEEF11Eu);
     W16(prefix + 4, 0x0100u);
-    W16(prefix + 6, 56u);
+    W16(prefix + 6, 60u);
+    W16(prefix + 8, 4u); /* required hardware range */
     W16(prefix + 10, policy.manufacturer);
     W16(prefix + 12, policy.image_type);
     W32(prefix + 14, offer.version);
+    W16(prefix + 18, 2u); /* Zigbee PRO */
     W32(prefix + 52, offer.file_size);
-    W32(prefix + 58, 1u);
-    prefix[62] = 0xE9u;
+    W16(prefix + 56, 1u); /* minimum hardware */
+    W16(prefix + 58, 1u); /* maximum hardware */
+    W16(prefix + 60, 0u); /* upgrade image element tag */
+    W32(prefix + 62, 1u); /* ESP image length */
+    prefix[66] = 0xE9u;
 }
 void tearDown(void) {}
 void test_OtaImagePolicy_ValidCandidateAndAppPrefix(void) {
     uint32_t app_bytes = 0;
     TEST_ASSERT_TRUE(OtaImagePolicy_AcceptOffer(&policy, &offer));
     TEST_ASSERT_TRUE(OtaImagePolicy_ValidatePrefix(&policy, &offer,
-                                                  prefix, 63u, &app_bytes));
+                                                  prefix, 67u, &app_bytes));
     TEST_ASSERT_EQUAL_UINT32(1u, app_bytes);
 }
 void test_OtaImagePolicy_RejectDifferentManufacturerAndImageType(void) {
@@ -54,50 +59,51 @@ void test_OtaImagePolicy_RejectEqualOlderAndOversizedImage(void) {
     offer.version = policy.current_version + 1u;
     offer.file_size = policy.slot_size + 100u;
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, &offer));
-    offer.file_size = 62u;
+    offer.file_size = 66u;
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, &offer));
 }
 void test_OtaImagePolicy_RejectTruncatedOrInvalidEnvelope(void) {
     uint32_t bytes = 9u;
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 62u, &bytes));
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, NULL, 63u, &bytes));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 66u, &bytes));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, NULL, 67u, &bytes));
     prefix[0] ^= 1u;
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
     prefix[0] ^= 1u;
     W16(prefix + 4, 0x0101u);
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
     W16(prefix + 4, 0x0100u);
-    W32(prefix + 52, 64u);
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
+    W32(prefix + 52, 68u);
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
 }
 void test_OtaImagePolicy_RejectUnsafeFlagsAndHardwareRange(void) {
     uint32_t bytes = 0;
     W16(prefix + 8, 2u); /* device-specific, not supported */
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
+    W16(prefix + 8, 0u); /* missing hardware range */
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
     W16(prefix + 8, 4u);
-    W16(prefix + 6, 60u);
-    W16(prefix + 56, 2u);
+    W16(prefix + 56, 2u); /* hardware 1 not in [2,3] */
     W16(prefix + 58, 3u);
-    W16(prefix + 62, 0u);
-    W32(prefix + 64, 1u);
-    prefix[68] = 0xE9u;
-    offer.file_size = 69u;
-    W32(prefix + 52, 69u);
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 69u, &bytes));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
     W16(prefix + 56, 1u);
-    TEST_ASSERT_TRUE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 69u, &bytes));
+    W16(prefix + 58, 1u);
+    TEST_ASSERT_TRUE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
+    W16(prefix + 18, 1u); /* Zigbee version 2007, not PRO */
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
 }
+
 void test_OtaImagePolicy_RejectElementSizeTagAndMagic(void) {
     uint32_t bytes = 0;
-    W16(prefix + 56, 1u);
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
-    W16(prefix + 56, 0u);
-    W32(prefix + 58, 2u);
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
-    W32(prefix + 58, 1u);
-    prefix[62] = 0x00u;
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, &bytes));
+    W16(prefix + 60, 1u);
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
+    W16(prefix + 60, 0u);
+    W32(prefix + 62, 2u);
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
+    W32(prefix + 62, 1u);
+    prefix[66] = 0x00u;
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, &bytes));
 }
+
 void test_OtaImagePolicy_RejectDuplicateSkippedAndOverrunBlocks(void) {
     uint8_t block[4] = {1,2,3,4};
     TEST_ASSERT_TRUE(OtaImagePolicy_AcceptBlock(0u, 0u, block, 4u, 10u));
@@ -117,7 +123,7 @@ void test_OtaImagePolicy_NullAndExtremeInputsAreSafe(void) {
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(NULL, &offer));
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, NULL));
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&huge, &offer));
-    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 63u, NULL));
+    TEST_ASSERT_FALSE(OtaImagePolicy_ValidatePrefix(&policy, &offer, prefix, 67u, NULL));
     TEST_ASSERT_EQUAL_UINT32(0, bytes);
 }
 

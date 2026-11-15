@@ -25,7 +25,8 @@ bool OtaImagePolicy_AcceptOffer(const OtaImagePolicy *policy,
      * envelope can be larger than a flash slot by a bounded header only. */
     if (policy->slot_size > UINT32_MAX - (OTA_HEADER_MIN + OTA_HEADER_HW_OPTION +
                                           OTA_ELEMENT_HEADER)) return false;
-    return offer->file_size >= OTA_HEADER_MIN + OTA_ELEMENT_HEADER + 1u &&
+    return offer->file_size >= OTA_HEADER_MIN + OTA_HEADER_HW_OPTION +
+                               OTA_ELEMENT_HEADER + 1u &&
            offer->file_size <= policy->slot_size + OTA_HEADER_MIN +
                                OTA_HEADER_HW_OPTION + OTA_ELEMENT_HEADER;
 }
@@ -42,12 +43,14 @@ bool OtaImagePolicy_ValidatePrefix(const OtaImagePolicy *policy,
     uint16_t flags = Read16(prefix + 8);
     /* Reject optional credential/device-specific header formats until
      * there is a specific product policy and safe parser for them. */
-    if (flags != 0u && flags != OTA_HEADER_HW_OPTION) return false;
-    if (header_len != OTA_HEADER_MIN +
-        ((flags & OTA_HEADER_HW_OPTION) ? OTA_HEADER_HW_OPTION : 0u)) return false;
+    /* #27 requires a checked hardware range in every release image. A
+     * missing or ambiguous optional range is not acceptable. */
+    if (flags != OTA_HEADER_HW_OPTION ||
+        header_len != OTA_HEADER_MIN + OTA_HEADER_HW_OPTION) return false;
     if (Read16(prefix + 10) != offer->manufacturer ||
         Read16(prefix + 12) != offer->image_type ||
         Read32(prefix + 14) != offer->version ||
+        Read16(prefix + 18) != 2u || /* Zigbee PRO */
         Read32(prefix + 52) != offer->file_size) return false;
     if (flags & OTA_HEADER_HW_OPTION) {
         if (length < OTA_HEADER_MIN + OTA_HEADER_HW_OPTION) return false;
