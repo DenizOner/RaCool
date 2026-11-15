@@ -1,0 +1,66 @@
+# RaCool signed OTA — approved offline configuration, NOT yet deployed
+
+Decision: **ESP-IDF 5.3.1, RSA-v2 app signatures without hardware Secure Boot or
+eFuse changes**. No private signing key, encryption key or device identifier
+may be checked in, passed in a command line log, or printed to GitHub Actions.
+
+## Why this profile remains opt-in
+
+The active production `sdkconfig.esp32-c6-devkitc-1` is a tested unsigned
+baseline. ESP-IDF 5.3.1 verifies a new signed OTA image against the **public
+key in the currently running application's first signature block**, and
+assumes that starting image is trusted. Activating signed OTA verification on
+a currently unsigned image **without first installing a trusted signed base**
+is unsafe. Neither a successful CI build nor a header hash establishes that
+a device has been migrated.
+
+`signed-ota.kconfig` holds the intended *additional* Kconfig inputs for an
+isolated, key-provisioned local build. It is not automatically loaded into
+PlatformIO production configuration. The exact generated SDK config must be
+read back after a fresh CMake configure. Bootloader rollback must remain ON.
+When using manually signed output, keep
+`CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=n`; the unsigned intermediate
+binary is never released as an installable firmware.
+
+## Mandatory private preflight before any permitted device upload
+
+1. An authorized local operator securely generates and backs up one RSA-3072
+   signing key **outside the repository and any synchronized/public directory**.
+   Public verification material alone can be used for offline checks.
+   Never publish the private key, seed, passphrase, or absolute local path.
+2. In an isolated clean candidate worktree, activate the policy without
+   changing production defaults, and verify actual generated
+   `CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y`,
+   `CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y`,
+   `CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y`,
+   `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`, with hardware Secure Boot,
+   flash encryption, and eFuse anti-rollback all OFF.
+3. Use the pinned ESP-IDF `espsecure.py` tooling to sign the *built*
+   application image with the offline private key, verify its signature
+   using the expected public key, and verify the signed image fits the
+   inactive 3 MiB slot **including signature block**.
+4. Compare the currently installed firmware's actual app descriptor,
+   partition selection, bootloader rollback support, OTA identity, and
+   original NVS/Zigbee partitions. Prove a recoverable, signed base can be
+   installed **without erasing any NVS, network or LittleFS data**. This is
+   a physical-data-risk step requiring its own explicit approval.
+5. After a *separately approved* migration/boot, verify the new running
+   image really has the expected signed-image first signature block and
+   trusted key, both OTA slots can recover, all critical services/relay
+   and the Zigbee join work, and the firmware is production not diagnostic.
+6. Only then enable a real OTA image writer with strict ZCL header + version +
+   contiguous block validation and ESP-IDF signed-app verification before
+   marking any slot bootable. Physical boot/power-loss and RF acceptance
+   remain NOT TESTED until observed.
+
+This mode protects against network-delivered firmware forgery but **does not
+protect from an attacker able to rewrite flash or the bootloader physically**.
+The ZCL outer header and `OtaImagePolicy` are an admission filter, not a
+cryptographic signature verification. Signed OTA is still disabled in the
+existing production image and the EP10 callback still fails closed.
+
+Sources (pinned version):
+- ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
+- ESP-IDF v5.3.1 Secure Boot V2 / Signed App Verification Without Hardware
+  Secure Boot documentation
+- ESP Zigbee SDK 2.0.5 `examples/ota_upgrade/ota_client/main`

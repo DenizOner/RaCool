@@ -1,6 +1,7 @@
 ﻿#if !defined(RACOOL_TARGET_TESTING) || defined(RACOOL_INTERNAL_TEST_ACCESS)
 #include "Communication/Zigbee/Endpoints/EndpointOTA.h"
 #include "Communication/Zigbee/Endpoints/EndpointCommon.h"
+#include "Communication/Zigbee/Endpoints/OtaImagePolicy.h"
 #include "Communication/Zigbee/ZigbeeConfig.h"
 #include "Core/EventBus/IEventBus.h"
 #include "Core/ServiceLocator/ServiceLocator.h"
@@ -155,8 +156,28 @@ static bool OTA_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callback
      * flash operation could falsely advertise an installed image.
      * Reject every transfer stage until the complete OTA owner is implemented.
      */
-    if (msg->in.progress == EZB_ZCL_OTA_UPGRADE_PROGRESS_START)
-        ESP_LOGW(TAG_OTA, "OTA rejected: verified image writer is not implemented");
+    if (msg->in.progress == EZB_ZCL_OTA_UPGRADE_PROGRESS_START) {
+        const OtaImagePolicy policy = {
+            .manufacturer = ZIGBEE_OTA_MANUFACTURER_CODE,
+            .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+            .hardware_version = ZIGBEE_OTA_UPGRADE_HARDWARE_VERSION,
+            .current_version = ZIGBEE_FIRMWARE_VERSION,
+            .slot_size = 0x300000u
+        };
+        const OtaImageOffer offer = {
+            .manufacturer = msg->in.start.manuf_code,
+            .image_type = msg->in.start.image_type,
+            .version = msg->in.start.file_version,
+            .file_size = msg->in.start.image_size
+        };
+        if (!OtaImagePolicy_AcceptOffer(&policy, &offer)) {
+            RejectUnimplementedOta(ota, true);
+            *ret_status = ESP_ERR_INVALID_ARG;
+            msg->out.result = EZB_ZCL_STATUS_ABORT;
+            return true;
+        }
+        ESP_LOGW(TAG_OTA, "Valid OTA offer rejected: signed writer not yet active");
+    }
 
     switch (msg->in.progress) {
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_START:

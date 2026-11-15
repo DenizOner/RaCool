@@ -87,7 +87,11 @@ void test_EndpointOTA_RegisterClusters(void) {
 void test_EndpointOTA_HandleAction_Progress(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
     ezb_zcl_ota_upgrade_client_progress_message_t messages[] = {
-        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+                 .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                           .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                           .file_version = ZIGBEE_FIRMWARE_VERSION + 1u,
+                           .image_size = 1000u}}},
         {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_RECEIVING}},
         {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK}},
         {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY}},
@@ -114,10 +118,36 @@ void test_EndpointOTA_HandleAction_Progress(void) {
     }
 }
 
+void test_EndpointOTA_RejectsOldAndForeignOffersBeforeFlash(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+               .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                         .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                         .file_version = ZIGBEE_FIRMWARE_VERSION,
+                         .image_size = 1000u}}
+    };
+    esp_err_t status = ESP_OK;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    msg.in.start.file_version++;
+    msg.in.start.image_type++;
+    status = ESP_OK;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    TEST_ASSERT_EQUAL(2, otaErrorEvents);
+}
+
 void test_EndpointOTA_SeparateAttemptsReportErrors(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
     ezb_zcl_ota_upgrade_client_progress_message_t msg = {
-        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START}
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+               .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                         .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                         .file_version = ZIGBEE_FIRMWARE_VERSION + 1u,
+                         .image_size = 1000u}}
     };
     for (unsigned i = 0; i < 2u; ++i) {
         esp_err_t status = ESP_OK;
@@ -233,6 +263,7 @@ void test_EndpointOTA_All(void) {
     RUN_TEST(test_EndpointOTA_HandleAction_Progress);
     RUN_TEST(test_EndpointOTA_AbortAndUnknownProgress);
     RUN_TEST(test_EndpointOTA_SeparateAttemptsReportErrors);
+    RUN_TEST(test_EndpointOTA_RejectsOldAndForeignOffersBeforeFlash);
 }
 
 #ifndef RACOOL_TARGET_TESTING
