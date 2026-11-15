@@ -87,3 +87,15 @@ ESP-IDF's `esp_ota_end` only when signature policy is enabled.
 The signed-base bootstrap, safe worker handoff, stream-to-image boundary,
 last-block/power-loss tests, OTA server interoperability and actual signed
 image cryptographic verification on hardware remain acceptance blockers.
+
+
+## Stream-to-app boundary
+
+`OtaImageStream` is a deterministic host-tested consumer of consecutive Zigbee
+OTA blocks. It buffers only 67 bytes: 60-byte validated ZCL header, 6-byte
+upgrade-image tag/length, and one ESP image magic byte. It writes the first
+image byte exactly once and never includes the Zigbee wrapper in the signed
+app image. Exact file offset, app size and final block are enforced before
+image writer verification; a failed transfer attempts backend cleanup. This
+code is **not called from the Zigbee callback** until an asynchronous worker
+can return *actual completed write results* without holding SDK locks.
