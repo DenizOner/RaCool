@@ -38,6 +38,8 @@ sdkconfig.*
 /.vscode/ipch/
 /.vscode/mcp.json
 /.idea/
+# Nested local Git worktrees; not project source
+/.worktrees/
 
 # -----------------------------------------------------------------------------
 # 4. Workstation Integration, Local Settings & Credentials
