@@ -67,6 +67,12 @@ jobs:
       - name: Run Host Native Unit Tests (86 suites, 1540 cases)
         run: node test/run_native_tests.mjs
 
+      - name: Verify Pillow 10.4.0 minimum with OLED PNG roundtrip
+        run: |
+          python -m pip install --no-deps --force-reinstall Pillow==10.4.0
+          python -c "import PIL; assert PIL.__version__ == '10.4.0', PIL.__version__"
+          python test/Hardware/OLED/test_frame_evidence.py
+
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -130,5 +136,11 @@ jobs:
       - name: Verify Test Inventory
         run: node test/check_test_inventory.mjs
 
-      - name: Run Helper Test Suites (82 suites, 406 cases)
+      - name: Run Helper Test Suites (82 suites, 407 cases)
         run: node test/run_helper_tests.mjs
+
+      - name: Verify Pillow 10.4.0 minimum with OLED PNG roundtrip
+        run: |
+          python -m pip install --no-deps --force-reinstall Pillow==10.4.0
+          python -c "import PIL; assert PIL.__version__ == '10.4.0', PIL.__version__"
+          python test/Hardware/OLED/test_frame_evidence.py
