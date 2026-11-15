@@ -1,25 +1,36 @@
-## Açıklama / Description
-<!-- Değişikliğin amacını ve çözdüğü problemi kısaca açıklayın. / Briefly describe the purpose and the problem solved. -->
+## Amaç ve bağlantılı kayıt
+<!-- Kısaca kullanıcı davranışını ve değişikliğin nedenini belirtin. -->
+Bağlantılı Issue: Refs #N
+<!-- Fiziksel kabul kriterleri açıkken Issue'yu otomatik kapatan anahtar sözcükler kullanmayın. -->
 
-Bağlantılı Issue / Related Issue: Closes #
+## Kapsam
+- [ ] Hata düzeltmesi
+- [ ] Yeni işlev
+- [ ] Test / CI / güvenlik iyileştirmesi
+- [ ] Dokümantasyon
 
-## Değişiklik Türü / Type of Change
-- [ ] Hata düzeltmesi (Bug fix)
-- [ ] Yeni özellik (New feature)
-- [ ] Refaktör / Kod temizliği (Refactoring)
-- [ ] Dokümantasyon güncellemesi (Documentation update)
-- [ ] Test / CI geliştirmesi (Testing / CI improvement)
+**Kullanıcıya etkisi / değişen sözleşme:**
 
-## Yapılan Doğrulamalar / Verification Completed
-- [ ] `node test/check_test_layout.mjs` hatasız geçti
-- [ ] `node test/check_test_inventory.mjs` hatasız geçti
-- [ ] `node test/run_helper_tests.mjs` (82 helper paketi) hatasız geçti
-- [ ] `node test/run_native_tests.mjs` (Host native birim testleri) hatasız geçti
-- [ ] `pio run -e esp32-c6-devkitc-1` derlemesi 0 hata ve 0 uyarı ile tamamlandı
-- [ ] Varsa donanım / fiziksel gözlemler belgelendi
+**Riskler, negatif senaryolar ve geri dönüş:**
 
-## Kontrol Listesi / Checklist
-- [ ] Kod standartlarına uygun ve gereksiz yorumlar temizlendi
-- [ ] Yeni/güncellenen API ve modüller için testler eklendi/güncellendi
-- [ ] Hiçbir gizli bilgi veya yerel ayar commit edilmedi
+## Otomatik doğrulamalar (ilgili son HEAD ve base)
+- [ ] `node test/check_test_layout.mjs`
+- [ ] `node test/check_test_inventory.mjs`
+- [ ] `node test/run_helper_tests.mjs`
+- [ ] `node test/run_native_tests.mjs`
+- [ ] `pio run -e esp32-c6-devkitc-1` (derleme 0 hata / 0 uyarı)
+- [ ] `Firmware Build & Host Native Tests (Linux)` — PASS
+- [ ] `Layout & Helper Suites (Windows)` — PASS
+- [ ] Gerekli negatif, yarış, yeniden açılış ve geri yükleme testleri
+- [ ] Doğrulanamayan / çalıştırılmayan testler **NOT TESTED** olarak belirtildi
 
+**CI çalışması ve son HEAD bağlantısı:**
+
+## Bağımsız denetim ve gerçek cihaz kabulü
+- [ ] Ayrı salt-okunur denetçi son ilgili farkı inceledi; PR yorumunda `PASS / FAIL / BLOCKED` ve gerekçe var
+- [ ] Denetçinin yorumu, GitHub'ın resmî PR approval işlemi olarak gösterilmiyor
+- [ ] Gerekli gerçek cihaz, röle, OLED, encoder, NVS yeniden açılış ve Zigbee RF kabulü ayrıca kanıtlandı **veya açıkça BLOCKED / NOT TESTED**
+- [ ] Gizli bilgi / yerel ayar / özel cihaz kimliği eklenmedi
+- [ ] İlgili `CODEBASE.md` / modül belgeleri, sözleşme değiştiyse güncellendi
+
+**Donanım gözlemi (gerekliyse, sonuç ve sorumlu):**

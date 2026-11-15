@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -20,19 +23,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js (for asset & font generators)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: '22'
           cache: 'npm'
 
       - name: Install Node dependencies
         run: npm ci
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -44,7 +49,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Cache PlatformIO Core and Packages
-        uses: actions/cache@v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.platformio
@@ -62,10 +67,17 @@ jobs:
       - name: Run Host Native Unit Tests (86 suites, 1540 cases)
         run: node test/run_native_tests.mjs
 
+      - name: Verify Pillow 10.4.0 minimum with OLED PNG roundtrip
+        run: |
+          python -m pip install --no-deps --force-reinstall Pillow==10.4.0
+          python -c "import PIL; assert PIL.__version__ == '10.4.0', PIL.__version__"
+          python test/Hardware/OLED/test_frame_evidence.py
+
       - name: Upload Firmware Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: racool-firmware-esp32-c6
+          retention-days: 14
           path: |
             .pio/build/esp32-c6-devkitc-1/firmware.bin
             .pio/build/esp32-c6-devkitc-1/bootloader.bin
@@ -73,7 +85,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Managed Dependencies (for Helper Suites)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: managed-dependencies
           path: |
@@ -88,24 +100,26 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Download Managed Dependencies
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: managed-dependencies
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: '22'
           cache: 'npm'
 
       - name: Install Node dependencies
         run: npm ci
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -122,5 +136,11 @@ jobs:
       - name: Verify Test Inventory
         run: node test/check_test_inventory.mjs
 
-      - name: Run Helper Test Suites (82 suites, 406 cases)
+      - name: Run Helper Test Suites (82 suites, 407 cases)
         run: node test/run_helper_tests.mjs
+
+      - name: Verify Pillow 10.4.0 minimum with OLED PNG roundtrip
+        run: |
+          python -m pip install --no-deps --force-reinstall Pillow==10.4.0
+          python -c "import PIL; assert PIL.__version__ == '10.4.0', PIL.__version__"
+          python test/Hardware/OLED/test_frame_evidence.py

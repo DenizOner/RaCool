@@ -444,6 +444,52 @@ void test_DiagnosticsManager_PersistentZigbeeFailureKeepsHeapWarningAndRealScore
     TEST_ASSERT_EQUAL(1, completedScanEvents);
     TEST_ASSERT_EQUAL(1, heapWarningEvents);
 }
+void test_DiagnosticsManager_HealthyZigbeeNeverDefersOtherFailure(void) {
+    setUp_DiagnosticsManager();
+    ConfigureUnhealthyPeriodicZigbee();
+    readinessService.CheckHealth = Healthy;
+    diagManager.customCheckCount = 1;
+    diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
+        .name = "RealFailure", .check_fn = sample_custom_check_fail
+    };
+    testBus.Publish = CaptureIndependentHealthEvents;
+    mocked_GetEventBus_fake.return_val = &testBus;
+    heapWarningEvents = completedScanEvents = healthChangeEvents = 0;
+    TEST_ASSERT_TRUE(RunScan(true));
+    TEST_ASSERT_FALSE(atomic_load(&diagManager.periodicZigbeePending));
+    TEST_ASSERT_FALSE(diagManager.scanPending);
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(2, diagManager.lastResult.services_checked);
+    TEST_ASSERT_EQUAL(1, diagManager.lastResult.services_healthy);
+    TEST_ASSERT_EQUAL(50, diagManager.lastResult.health_score);
+    TEST_ASSERT_EQUAL_STRING("RealFailure", diagManager.lastResult.last_failed_service);
+    TEST_ASSERT_EQUAL(0, heapWarningEvents);
+    TEST_ASSERT_EQUAL(1, completedScanEvents);
+    TEST_ASSERT_EQUAL(1, healthChangeEvents);
+}
+
+void test_DiagnosticsManager_HealthyZigbeeOtherFailureWithHeapWarningIsImmediate(void) {
+    setUp_DiagnosticsManager();
+    ConfigureHeapWarningDuringZigbeeGrace();
+    readinessService.CheckHealth = Healthy;
+    diagManager.customCheckCount = 1;
+    diagManager.customChecks[0] = (DiagnosticsCustomCheckItem){
+        .name = "RealFailure", .check_fn = sample_custom_check_fail
+    };
+    TEST_ASSERT_TRUE(RunScan(true));
+    TEST_ASSERT_FALSE(atomic_load(&diagManager.periodicZigbeePending));
+    TEST_ASSERT_FALSE(diagManager.scanPending);
+    TEST_ASSERT_TRUE(diagManager.lastResult.completed);
+    TEST_ASSERT_EQUAL(2, diagManager.lastResult.services_checked);
+    TEST_ASSERT_EQUAL(1, diagManager.lastResult.services_healthy);
+    TEST_ASSERT_EQUAL(50, diagManager.lastResult.health_score);
+    TEST_ASSERT_EQUAL_STRING("RealFailure", diagManager.lastResult.last_failed_service);
+    TEST_ASSERT_EQUAL(1, heapWarningEvents);
+    TEST_ASSERT_EQUAL(45916, lastHeapWarningFreeBytes);
+    TEST_ASSERT_EQUAL(1, completedScanEvents);
+    TEST_ASSERT_EQUAL(1, healthChangeEvents);
+}
+
 void test_DiagnosticsManager_OtherFailureWithHeapWarningIsImmediate(void) {
     setUp_DiagnosticsManager();
     ConfigureHeapWarningDuringZigbeeGrace();

@@ -176,6 +176,7 @@ static bool RunScan(bool periodic) {
     LOGI("SelfTestTask", "Asynchronous self-test started");
     PublishEvent(EVENT_DIAG_SELFTEST_STARTED, EVENT_TYPE_INFO, NULL, 0);
     const char *periodicZigbee = NULL;
+    bool periodicZigbeeUnhealthy = false;
     for (uint32_t i = 0; i < config.criticalServiceCount && !atomic_load(&diagManager.closing); ++i) {
         const char *name = config.criticalServices[i];
         if (!name) continue;
@@ -229,6 +230,7 @@ static bool RunScan(bool periodic) {
             service->CheckHealth(service) : ESP_ERR_INVALID_STATE;
         int64_t elapsed = esp_timer_get_time() - started;
         bool healthy = code == 0 && elapsed <= (int64_t)config.serviceCheckTimeoutMs * 1000;
+        periodicZigbeeUnhealthy = !healthy;
         ++result.services_checked;
         if (healthy) ++result.services_healthy;
         else snprintf(result.last_failed_service, sizeof(result.last_failed_service),
@@ -245,7 +247,7 @@ static bool RunScan(bool periodic) {
     /* The heap warning is independent of Zigbee's transient health.
      * Publish genuine memory pressure now, without publishing a partial
      * Zigbee score. Keep the original memory thresholds unchanged. */
-    if (periodicZigbee && result.services_checked &&
+    if (periodicZigbee && periodicZigbeeUnhealthy && result.services_checked &&
         result.services_healthy + 1 == result.services_checked) {
         if (heapWarning) {
             PublishEvent(EVENT_DIAG_HEAP_WARNING, EVENT_TYPE_WARNING, &freeHeap, sizeof(freeHeap));

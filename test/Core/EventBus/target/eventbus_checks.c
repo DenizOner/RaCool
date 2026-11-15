@@ -62,7 +62,10 @@ void target_eventbus_verify_owned_payload_and_stop(void) {
     memset(source, 0x6A, sizeof(source));
     char name[] = "OWNED";
     TEST_ASSERT_EQUAL(0, bus->Publish((BusEvent){.eventName=name,.data=source,.dataSize=sizeof(source)}));
-    memset(source, 0, sizeof(source)); name[0]='X';
+    // Volatile writes preserve the source mutation that tests queued payload ownership.
+    volatile unsigned char *source_bytes = source;
+    for (size_t i = 0; i < sizeof(source); ++i) source_bytes[i] = 0;
+    name[0]='X';
     xSemaphoreGive(callback_release);
     TEST_ASSERT_EQUAL(pdTRUE, xQueueReceive(callback_result, received, pdMS_TO_TICKS(1000)));
     for (size_t i=0;i<sizeof(received);++i) TEST_ASSERT_EQUAL_HEX8(0x6A, received[i]);
