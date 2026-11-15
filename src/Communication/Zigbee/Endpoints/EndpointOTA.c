@@ -2,9 +2,7 @@
 #include "Communication/Zigbee/Endpoints/EndpointOTA.h"
 #include "Communication/Zigbee/Endpoints/EndpointCommon.h"
 #include "Communication/Zigbee/ZigbeeConfig.h"
-#include "Core/EventBus/IEventBus.h"
 #include "Core/ServiceLocator/ServiceLocator.h"
-#include "Core/LogManager/ILogManager.h"
 #include "esp_zigbee.h"
 #include "Management/ConfigurationManager/IConfigurationManager.h"
 #include "Management/PowerManager/IPowerManager.h"
@@ -22,14 +20,6 @@ typedef struct {
 
 static EndpointOTA otaInstance;
 static const char *TAG_OTA = "EndpointOTA";
-
-static void PublishOtaEvent(const char *name, EventType type) {
-    IEventBus *bus = ServiceLocator_GetEventBus();
-    if (bus) {
-        BusEvent event = {.eventName = name, .type = type};
-        bus->Publish(event);
-    }
-}
 
 static const char *OTA_GetName(IZigbeeEndpoint *self) { return "OTAUpgradeEndpoint"; }
 static uint8_t OTA_GetEndpointId(IZigbeeEndpoint *self) { return ((EndpointOTA *)self)->endpoint_id; }
@@ -148,10 +138,11 @@ static bool OTA_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callback
      * flash operation could falsely advertise an installed image.
      * Reject every transfer stage until the complete OTA owner is implemented.
      */
+    if (msg->in.progress == EZB_ZCL_OTA_UPGRADE_PROGRESS_START)
+        ESP_LOGW(TAG_OTA, "OTA rejected: verified image writer is not implemented");
+
     switch (msg->in.progress) {
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_START:
-        ESP_LOGW(TAG_OTA, "OTA rejected: verified image writer is not implemented");
-        /* fall through */
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_RECEIVING:
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK:
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY:
