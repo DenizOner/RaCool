@@ -22,6 +22,14 @@ static int32_t request_shutdown(ISystemController *self, uint32_t delay) {
 static unsigned profile_writes;
 static PowerMode_t requested_mode;
 static int32_t profile_result;
+static IEventBus otaEventBus;
+static unsigned otaErrorEvents;
+static unsigned otaCompleteEvents;
+static int32_t recordOtaEvent(BusEvent event) {
+    if (event.eventName && !strcmp(event.eventName, "ota_error")) otaErrorEvents++;
+    if (event.eventName && !strcmp(event.eventName, "ota_complete")) otaCompleteEvents++;
+    return 0;
+}
 static esp_err_t snapshot(IConfigurationManager *self, SystemSettings *out) {
     (void)self; memset(out, 0, sizeof(*out)); out->system.power_profile = 1; return ESP_OK;
 }
@@ -47,6 +55,9 @@ void setUp_EndpointOTA(void) {
     mocked_ezb_zcl_ota_upgrade_create_cluster_desc_fake.return_val = (void *)0x200;
     ezb_zcl_thermostat_ui_config_create_cluster_desc_fake.return_val = (void *)0x300;
     profile_writes = freed_endpoints = freed_clusters = 0; profile_result = POWER_OK;
+    otaEventBus = (IEventBus){.Publish = recordOtaEvent};
+    otaErrorEvents = otaCompleteEvents = 0;
+    mocked_ServiceLocator_GetEventBus_fake.return_val = &otaEventBus;
 }
 
 void tearDown_EndpointOTA(void) {}
@@ -98,6 +109,8 @@ void test_EndpointOTA_HandleAction_Progress(void) {
         TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
         TEST_ASSERT_EQUAL_UINT32(0, otaInstance.bytesReceived);
         TEST_ASSERT_EQUAL_UINT32(0, otaInstance.totalSize);
+        TEST_ASSERT_EQUAL(i + 1u, otaErrorEvents);
+        TEST_ASSERT_EQUAL(0, otaCompleteEvents);
     }
 }
 
@@ -125,6 +138,8 @@ void test_EndpointOTA_AbortAndUnknownProgress(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
     TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
     TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
+    TEST_ASSERT_EQUAL(1, otaErrorEvents);
+    TEST_ASSERT_EQUAL(0, otaCompleteEvents);
 }
 
 void test_EndpointOTA_ProfileValidationAndErrors(void) {
