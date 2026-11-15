@@ -238,6 +238,33 @@ void test_SerialMonitor_PerfTimerFailures(void) {
   TEST_ASSERT_EQUAL(0, SerialMonitor_StopPerfTest());
 }
 
+static char captured_perf_packet[32];
+static size_t captured_perf_packet_length;
+static int32_t capture_perf_packet(const void *data, size_t length) {
+  if (length >= sizeof(captured_perf_packet)) return -1;
+  memcpy(captured_perf_packet, data, length);
+  captured_perf_packet[length] = '\0';
+  captured_perf_packet_length = length;
+  return 0;
+}
+void test_SerialMonitor_PerfTickPacketFormat(void) {
+  setUp_SM(); ISerialMonitor *mon = SerialMonitor_GetModule();
+  TEST_ASSERT_EQUAL(0, mon->base.Initialize(&mon->base, NULL));
+  TEST_ASSERT_EQUAL(0, mon->base.Start(&mon->base));
+  RESET_FAKE(mocked_esp_timer_create);
+  RESET_FAKE(mocked_esp_timer_start_periodic);
+  RESET_FAKE(mocked_esp_timer_stop);
+  mocked_esp_timer_create_fake.custom_fake = create_perf_timer;
+  mocked_esp_timer_start_periodic_fake.return_val = ESP_OK;
+  TEST_ASSERT_EQUAL(0, SerialMonitor_StartPerfTest(10));
+  SerialMonitor_PerfTickLocked(capture_perf_packet);
+  TEST_ASSERT_EQUAL_STRING("TIMER_DATA:00000000\n", captured_perf_packet);
+  TEST_ASSERT_EQUAL(sizeof("TIMER_DATA:00000000\n") - 1, captured_perf_packet_length);
+  SerialMonitor_PerfTickLocked(capture_perf_packet);
+  TEST_ASSERT_EQUAL_STRING("TIMER_DATA:00000001\n", captured_perf_packet);
+  TEST_ASSERT_EQUAL(0, SerialMonitor_StopPerfTest());
+}
+
 void test_SerialMonitor_StopTimeoutPreservesResources(void) {
   setUp_SM(); ISerialMonitor *mon = SerialMonitor_GetModule();
   TEST_ASSERT_EQUAL(0, mon->base.Initialize(&mon->base, NULL));

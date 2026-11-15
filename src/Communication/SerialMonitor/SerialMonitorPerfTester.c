@@ -6,6 +6,7 @@
 #include <freertos/task.h>
 #include <string.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdatomic.h>
 
 static const char *TAG = "SerPerf";
@@ -25,7 +26,7 @@ void SerialMonitor_PerfTickLocked(SerialMonitorPerfEnqueue enqueue) {
 
     static uint32_t counter = 0;
     char packet[32];
-    snprintf(packet, sizeof(packet), "TIMER_DATA:%08lu\n", counter++);
+    snprintf(packet, sizeof(packet), "TIMER_DATA:%08" PRIu32 "\n", counter++);
     
     // Attempt to write log (Asynchronously)
     if (enqueue(packet, strlen(packet)) != 0) {
@@ -67,7 +68,7 @@ int32_t SerialMonitor_PerfStartLocked(uint32_t frequency_hz) {
         perfState.running = false;
         return -1;
     }
-    ESP_LOGI(TAG, "Performance test started at %lu Hz", frequency_hz);
+    ESP_LOGI(TAG, "Performance test started at %" PRIu32 " Hz", frequency_hz);
     return 0;
 }
 
@@ -85,7 +86,7 @@ int32_t SerialMonitor_PerfStopLocked(void) {
     uint32_t duration = end_time - perfState.start_time;
 
     ESP_LOGI(TAG, "Performance Test Finished:");
-    ESP_LOGI(TAG, "Duration: %lu ms", duration);
+    ESP_LOGI(TAG, "Duration: %" PRIu32 " ms", duration);
     ESP_LOGI(TAG, "Total Queued: %lu", (unsigned long)atomic_load(&perfState.total_queued));
     ESP_LOGI(TAG, "Total Queue Errors: %lu", (unsigned long)atomic_load(&perfState.total_errors));
     if (duration > 0) {
