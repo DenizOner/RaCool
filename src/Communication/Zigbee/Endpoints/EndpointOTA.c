@@ -141,59 +141,44 @@ static bool OTA_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callback
     ezb_zcl_ota_upgrade_client_progress_message_t *msg =
         (ezb_zcl_ota_upgrade_client_progress_message_t *)message;
 
+    /*
+     * This endpoint does not yet own a validated OTA parser, inactive flash
+     * partition, esp_ota handle or boot/rollback contract. The SDK forwards
+     * this callback result to the sender: reporting SUCCESS before any actual
+     * flash operation could falsely advertise an installed image.
+     * Reject every transfer stage until the complete OTA owner is implemented.
+     */
     switch (msg->in.progress) {
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_START:
-        ota->state = OTA_STATE_DOWNLOADING;
-        ota->bytesReceived = 0;
-        ota->totalSize = msg->in.start.image_size;
-        ESP_LOGI(TAG_OTA, "OTA download started, size=%lu", (unsigned long)ota->totalSize);
-        PublishOtaEvent("ota_download_start", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
+        ESP_LOGW(TAG_OTA, "OTA rejected: verified image writer is not implemented");
+        /* fall through */
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_RECEIVING:
-        ota->bytesReceived = msg->in.receiving.file_offset + msg->in.receiving.block_size;
-        if (ota->totalSize > 0) {
-            uint8_t pct = (uint8_t)((ota->bytesReceived * 100) / ota->totalSize);
-            if (pct % 10 == 0) {
-                ESP_LOGI(TAG_OTA, "OTA progress: %u%% (%lu/%lu)",
-                         pct, (unsigned long)ota->bytesReceived, (unsigned long)ota->totalSize);
-            }
-        }
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK:
-        ota->state = OTA_STATE_VERIFYING;
-        ESP_LOGI(TAG_OTA, "OTA download complete, verifying...");
-        PublishOtaEvent("ota_verify_start", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY:
-        ota->state = OTA_STATE_APPLYING;
-        ESP_LOGI(TAG_OTA, "OTA verification passed, applying...");
-        PublishOtaEvent("ota_apply_start", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_FINISH:
-        ota->state = OTA_STATE_IDLE;
-        ESP_LOGI(TAG_OTA, "OTA upgrade complete! Countdown: %lu s", (unsigned long)msg->in.finish.count_down_delay);
-        PublishOtaEvent("ota_complete", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
+        ota->state = OTA_STATE_ERROR;
+        ota->bytesReceived = 0;
+        ota->totalSize = 0;
+        *ret_status = ESP_ERR_NOT_SUPPORTED;
+        msg->out.result = EZB_ZCL_STATUS_ABORT;
         return true;
 
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT:
+        /* Acknowledge cancellation only, never successful installation. */
         ota->state = OTA_STATE_ERROR;
-        ESP_LOGE(TAG_OTA, "OTA upgrade aborted");
-        PublishOtaEvent("ota_error", EVENT_TYPE_ERROR);
+        ota->bytesReceived = 0;
+        ota->totalSize = 0;
+        *ret_status = ESP_OK;
         msg->out.result = EZB_ZCL_STATUS_SUCCESS;
         return true;
 
     default:
-        ESP_LOGW(TAG_OTA, "Unhandled OTA status: 0x%x", msg->in.progress);
-        return false;
+        ota->state = OTA_STATE_ERROR;
+        ota->bytesReceived = 0;
+        ota->totalSize = 0;
+        *ret_status = ESP_ERR_INVALID_ARG;
+        msg->out.result = EZB_ZCL_STATUS_ABORT;
+        return true;
     }
 }
 
