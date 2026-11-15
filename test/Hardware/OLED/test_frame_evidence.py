@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parent/'diagnostic'))
-from frame_evidence import parse_frame,bitmap
+from frame_evidence import parse_frame,bitmap,write_png
+from tempfile import TemporaryDirectory
+from PIL import Image, UnidentifiedImageError
 import unittest
 
 def records():
@@ -25,5 +27,22 @@ class FrameEvidence(unittest.TestCase):
         valid=records()
         for bad in [valid.rsplit('\n',2)[0],valid+valid,valid.replace('offset=64','offset=0'),valid.replace('seq=7 offset=64','seq=8 offset=64'),valid.replace('fnv=','fnv=0'),valid.replace('hex=0100','hex=0000'),valid.replace('width=128','width=127')]:
             with self.assertRaises(ValueError):parse_frame(bad)
+
+    def test_png_output_roundtrip_and_truncation_rejection(self):
+        with TemporaryDirectory() as tmp:
+            path=Path(tmp)/'oled.png'
+            write_png(parse_frame(records()),path)
+            with Image.open(path) as img:
+                img.load()
+                self.assertEqual((128,64),img.size)
+                self.assertEqual('L',img.mode)
+                self.assertEqual(255,img.getpixel((0,0)))
+                self.assertEqual(255,img.getpixel((127,63)))
+                self.assertEqual(0,img.getpixel((1,0)))
+            truncated=Path(tmp)/'truncated.png'
+            truncated.write_bytes(path.read_bytes()[:12])
+            with self.assertRaises((UnidentifiedImageError,OSError)):
+                with Image.open(truncated) as invalid:
+                    invalid.load()
 
 if __name__=='__main__':unittest.main()
