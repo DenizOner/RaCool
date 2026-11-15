@@ -28,10 +28,10 @@ static void PublishOtaError(void) {
         bus->Publish((BusEvent){.eventName = "ota_error", .type = EVENT_TYPE_ERROR});
 }
 
-static void RejectUnimplementedOta(EndpointOTA *ota) {
+static void RejectUnimplementedOta(EndpointOTA *ota, bool newAttempt) {
     /* Preserve the existing error event, but publish it only once per failed
      * transfer. Never publish ota_complete without verified flash/boot state. */
-    bool firstFailure = ota->state != OTA_STATE_ERROR;
+    bool firstFailure = newAttempt || ota->state != OTA_STATE_ERROR;
     ota->state = OTA_STATE_ERROR;
     ota->bytesReceived = 0;
     ota->totalSize = 0;
@@ -164,20 +164,20 @@ static bool OTA_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callback
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK:
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY:
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_FINISH:
-        RejectUnimplementedOta(ota);
+        RejectUnimplementedOta(ota, msg->in.progress == EZB_ZCL_OTA_UPGRADE_PROGRESS_START);
         *ret_status = ESP_ERR_NOT_SUPPORTED;
         msg->out.result = EZB_ZCL_STATUS_ABORT;
         return true;
 
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT:
         /* Acknowledge cancellation only, never successful installation. */
-        RejectUnimplementedOta(ota);
+        RejectUnimplementedOta(ota, false);
         *ret_status = ESP_OK;
         msg->out.result = EZB_ZCL_STATUS_SUCCESS;
         return true;
 
     default:
-        RejectUnimplementedOta(ota);
+        RejectUnimplementedOta(ota, false);
         *ret_status = ESP_ERR_INVALID_ARG;
         msg->out.result = EZB_ZCL_STATUS_ABORT;
         return true;
