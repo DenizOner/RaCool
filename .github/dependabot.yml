@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Only supported tooling ecosystems are managed; firmware SDK/toolchain is not.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      action-maintenance:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      npm-maintenance:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      python-maintenance:
+        patterns: ["*"]
+    ignore:
+      # PlatformIO owns the pinned ESP32-C6 build/toolchain.
+      - dependency-name: "platformio"
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
