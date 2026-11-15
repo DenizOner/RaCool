@@ -1,6 +1,6 @@
 {
   "devDependencies": {
     "lv_font_conv": "1.5.3",
-    "zigbee-herdsman-converters": "^26.107.0"
+    "zigbee-herdsman-converters": "^26.130.0"
   }
 }
