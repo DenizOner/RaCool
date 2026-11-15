@@ -8,6 +8,31 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
 const helper=fileURLToPath(new URL('./diagnostic/live_zigbee.mjs',import.meta.url));
+
+// Global bridge logging is a shared server setting, not a RaCool firmware control.
+// Deny all mutation-capable modes before a configuration file or network is touched.
+for (const [name, args, flags] of [
+    ['verify_traffic', ['verify','report_interval_radiator_s'], {RACOOL_REPORT_TRAFFIC:'1'}],
+    ['verify_fan', ['verify-fan'], {}],
+    ['observe_fan_sources', ['observe-fan-sources'], {}],
+    ['recovery_child', ['set-bridge-log-level','info','debug'], {}],
+    ['client_cut', ['verify','report_interval_radiator_s'], {RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG:'1'}],
+]) test('global bridge log mutation requires explicit opt-in before connection: '+name, async()=>{
+    const env={...process.env,...flags,RACOOL_ALLOW_BRIDGE_LOG_MUTATION:'0',
+        RACOOL_LOCAL_CONFIG:path.join(os.tmpdir(),'racool-unavailable-config-for-log-guard.json')};
+    const child=spawn(process.execPath,[helper,...args],{env});
+    let output='';
+    child.stdout.on('data',part=>output+=part);
+    child.stderr.on('data',part=>output+=part);
+    const code=await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>{child.kill();reject(Error('Log admission test timed out'));},5000);
+        child.once('error',error=>{clearTimeout(timer);reject(error);});
+        child.once('close',status=>{clearTimeout(timer);resolve(status);});
+    });
+    assert.notEqual(code,0);
+    assert.match(output,/Shared Zigbee2MQTT log mutation disabled by default/);
+    assert.doesNotMatch(output,/Configure Zigbee configuration path|MQTT connection/);
+});
 function field(text){const value=Buffer.from(text),length=Buffer.alloc(2);length.writeUInt16BE(value.length);return Buffer.concat([length,value]);}
 function publish(socket,topic,value,retained=false){
     const body=Buffer.concat([field(topic),Buffer.from(JSON.stringify(value))]);let size=body.length,bytes=[];
@@ -220,7 +245,8 @@ for (const scenario of ['confirmed','controlled_cut','foreign','uncertain','ack_
             RACOOL_MQTT_HOST:'127.0.0.1',RACOOL_MQTT_PORT:String(server.address().port),
             RACOOL_ZIGBEE_CONFIG:path.join(directory,'config.yaml'),
             RACOOL_LIVE_CONVERTER:path.join(directory,'unused.mjs'),
-            RACOOL_DEVICE_IEEE:device.ieee_address,RACOOL_REPORT_TRAFFIC:'1'};
+            RACOOL_DEVICE_IEEE:device.ieee_address,RACOOL_REPORT_TRAFFIC:'1',
+            RACOOL_ALLOW_BRIDGE_LOG_MUTATION:'1'};
         for(const key of ['RACOOL_REPORT_CHANGES','RACOOL_REPORT_RECONFIGURE',
             'RACOOL_RESULT_ID','RACOOL_TEST_CUT_CLIENT_AFTER_WIRE',
             'RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG'])delete env[key];

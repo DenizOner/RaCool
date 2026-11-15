@@ -28,6 +28,18 @@ import net from 'node:net';
 import {EventEmitter} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
 
+// The device firmware has its own CLI-only, runtime LogManager.
+ // Global Zigbee2MQTT logging is an unrelated, shared diagnostic setting.
+// Require a separate explicit opt-in before reading local credentials or
+// opening a network socket for a mode that could mutate that shared setting.
+const mode=process.argv[2]??'inspect';
+const wantsGlobalBridgeLogging = mode==='verify-fan' ||
+    mode==='observe-fan-sources' || mode==='set-bridge-log-level' ||
+    (mode==='verify' && (process.env.RACOOL_REPORT_TRAFFIC==='1' ||
+        process.env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG==='1'));
+if(wantsGlobalBridgeLogging && process.env.RACOOL_ALLOW_BRIDGE_LOG_MUTATION!=='1')
+    throw Error('Shared Zigbee2MQTT log mutation disabled by default; requires explicit RACOOL_ALLOW_BRIDGE_LOG_MUTATION=1 for authorized diagnostic use. Not a RaCool firmware log setting.');
+
 // Credentials stay in memory and are never included in logs or artifacts.
 const localPath = process.env.RACOOL_LOCAL_CONFIG ?? '.racool-local.json';
 const resultId=process.env.RACOOL_RESULT_ID;
@@ -71,7 +83,6 @@ let timer, mqttPing;
 socket.on('connect',()=>{let flags=2;const fields=[str('racool-audit-'+Date.now())];const user=scalar('user'),password=scalar('password');if(user){flags|=128;fields.push(str(user));}if(password){flags|=64;fields.push(str(password));}socket.write(packet(0x10,Buffer.concat([str('MQTT'),Buffer.from([4,flags,0,30]),...fields])));});
 socket.on('error',error=>{console.error('MQTT connection:',error.code);process.exitCode=1;});
 socket.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>1){let length=0,multiplier=1,offset=1,byte;do{if(offset>=buffer.length)return;byte=buffer[offset++];length+=(byte&127)*multiplier;multiplier*=128;}while(byte&128);if(buffer.length<offset+length)return;const type=buffer[0]>>4,flags=buffer[0];const body=buffer.subarray(offset,offset+length);buffer=buffer.subarray(offset+length);if(type===2){if(body[1]){console.error('MQTT authentication rejected:',body[1]);socket.end();process.exitCode=1;return;}events.emit('ready');}else if(type===3){const size=body.readUInt16BE();const topic=body.subarray(2,2+size).toString();let begin=2+size;if((flags>>1&3)>0){const ack=body.subarray(begin,begin+2);begin+=2;socket.write(packet(0x40,ack));}try{events.emit('message',topic,JSON.parse(body.subarray(begin).toString()),!!(flags&1));}catch(error){if(error instanceof SyntaxError)continue;throw error;}}}});
-const mode=process.argv[2]??'inspect';
 const cutAfterWire=process.env.RACOOL_TEST_CUT_CLIENT_AFTER_WIRE==='1';
 const cutAfterBridgeLog=process.env.RACOOL_TEST_CUT_CLIENT_AFTER_BRIDGE_LOG==='1';
 if((cutAfterWire||cutAfterBridgeLog) && mode!=='verify')

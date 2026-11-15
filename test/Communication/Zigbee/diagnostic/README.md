@@ -9,6 +9,22 @@ görünmesi yalnız o snapshot'ın kendi bağlantısıyla uyumunu gösterir; dö
 nasıl oluştuğunu veya önceki çökmelerle ilişkisini kanıtlamaz. Araç salt
 okunurdur ve cihazdaki firmware'e dahil edilmez.
 
+**RaCool firmware log seviyesi farklıdır:** cihazdaki ESP-IDF `LogManager`
+yalnız seri CLI üzerinden geçici değiştirilir; Zigbee2MQTT sunucusunun
+ortak kayıt seviyesiyle bağlantısı yoktur. Bu test yardımcısının
+`bridge/request/options` yoluyla **sunucu genelindeki log seviyesine**
+dokunan modları (trafik gözlemli `verify`, `verify-fan`,
+`observe-fan-sources` ve `set-bridge-log-level` kurtarma alt işlemi)
+varsayılan olarak **bağlantı kurulmadan önce reddedilir**.
+Yalnız ayrı onaylanmış, izole tanılama oturumlarında
+`RACOOL_ALLOW_BRIDGE_LOG_MUTATION=1` açıkça verilebilir; bu çevre
+değişkeni tek başına güvenli canlı kanıt veya ayar yazma yetkisi değildir.
+Gerçek Zigbee2MQTT 2.14.3 sıradan yeni MQTT aboneliklerinde
+`bridge/info` için yalnız retained başlangıç mesajı gönderebilir.
+Böyle bir durumda sonraki güvenlik kontrolleri hâlâ **BLOCKED** döner;
+retained mesaj taze sayılamaz, global ayar yazılamaz.
+Trafik gözlemi kapalı altı ZCL rapor aralığı kurtarması bu opt-in'i gerektirmez.
+
 `live_zigbee.mjs` bağlantı kesilince bekleyen bridge isteklerini başarısız
 sonlandırır, durum beklemelerini kapatır ve uzun işlemin temizlik blokları
 tamamlandıktan sonra sonuç JSON'unu yazar. Altı rapor aralığından biri seçilmiş
