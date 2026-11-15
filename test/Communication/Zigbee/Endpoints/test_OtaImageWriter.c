@@ -7,9 +7,11 @@
 
 static esp_partition_t running, inactive;
 static bool haveTarget, haveRunning, returnRunningSlot;
+static bool haveBootReadback, selectActuallyChangesBoot;
 static esp_err_t beginResult, writeResult, endResult, selectResult, abortResult;
 static int beginCalls, writeCalls, endCalls, selectCalls, abortCalls;
 static esp_ota_handle_t activeHandle;
+static const esp_partition_t *bootPartition;
 static OtaImageWriter writer;
 static uint8_t data[4] = {0xE9, 1, 2, 3};
 
@@ -19,6 +21,9 @@ const esp_partition_t *esp_ota_get_next_update_partition(const esp_partition_t *
 }
 const esp_partition_t *esp_ota_get_running_partition(void) {
     return haveRunning ? &running : NULL;
+}
+const esp_partition_t *esp_ota_get_boot_partition(void) {
+    return haveBootReadback ? bootPartition : NULL;
 }
 esp_err_t esp_ota_begin(const esp_partition_t *target, size_t size, esp_ota_handle_t *handle) {
     TEST_ASSERT_EQUAL_PTR(&inactive, target);
@@ -42,6 +47,7 @@ esp_err_t esp_ota_end(esp_ota_handle_t handle) {
 esp_err_t esp_ota_set_boot_partition(const esp_partition_t *target) {
     TEST_ASSERT_EQUAL_PTR(&inactive, target);
     selectCalls++;
+    if (selectActuallyChangesBoot) bootPartition = &inactive;
     return selectResult;
 }
 esp_err_t esp_ota_abort(esp_ota_handle_t handle) {
@@ -54,6 +60,8 @@ void setUp(void) {
     inactive = (esp_partition_t){.size=2000u};
     haveTarget = haveRunning = true;
     returnRunningSlot = false;
+    haveBootReadback = selectActuallyChangesBoot = true;
+    bootPartition = &running;
     beginResult = writeResult = endResult = selectResult = abortResult = ESP_OK;
     beginCalls = writeCalls = endCalls = selectCalls = abortCalls = 0;
     activeHandle = (esp_ota_handle_t)42u;
@@ -139,15 +147,57 @@ void test_Writer_CryptographicEndFailureCannotSelectBoot(void) {
     TEST_ASSERT_EQUAL(0, abortCalls);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
 }
-void test_Writer_BootSelectionFailureCanRetryWithoutReset(void) {
+static void writeAndVerify(void) {
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 4u));
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Write(&writer, data, 4u));
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Verify(&writer));
+}
+void test_Writer_FailedBootSelectionWithChangedReadbackLocksOwner(void) {
+    writeAndVerify();
     selectResult = ESP_FAIL;
     TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL_PTR(&inactive, esp_ota_get_boot_partition());
+    TEST_ASSERT_TRUE(writer.failed);
+    TEST_ASSERT_TRUE(writer.boot_selection_uncertain);
     TEST_ASSERT_FALSE(writer.boot_selected);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(1, selectCalls);
+    TEST_ASSERT_EQUAL(0, abortCalls);
+}
+void test_Writer_FailedBootSelectionEvenIfOldReadbackLocksOwner(void) {
+    writeAndVerify();
+    selectActuallyChangesBoot = false;
+    selectResult = ESP_FAIL;
+    TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL_PTR(&running, esp_ota_get_boot_partition());
+    TEST_ASSERT_TRUE(writer.boot_selection_uncertain);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(1, selectCalls);
+}
+void test_Writer_SuccessfulSdkReturnWithoutMatchingReadbackFailsClosed(void) {
+    writeAndVerify();
+    selectActuallyChangesBoot = false;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_TRUE(writer.failed);
+    TEST_ASSERT_TRUE(writer.boot_selection_uncertain);
+    TEST_ASSERT_FALSE(writer.boot_selected);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(1, selectCalls);
+}
+void test_Writer_BootReadbackMissingOrAlreadySelectedSkipsMutation(void) {
+    writeAndVerify();
+    haveBootReadback = false;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(0, selectCalls);
+    haveBootReadback = true;
+    bootPartition = &inactive;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(0, selectCalls);
+    bootPartition = &running;
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
-    TEST_ASSERT_EQUAL(0, abortCalls); /* verified but not pending handle */
+    TEST_ASSERT_EQUAL(0, abortCalls);
 }
 void test_Writer_AbortFailureRetainsOwnedHandleForRetry(void) {
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 4u));
@@ -187,7 +237,10 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_Writer_OverrunAbortsWithoutWritingExtraBytes);
     RUN_TEST(test_Writer_WriteFailureAbortsAndRetainsFailClosedState);
     RUN_TEST(test_Writer_CryptographicEndFailureCannotSelectBoot);
-    RUN_TEST(test_Writer_BootSelectionFailureCanRetryWithoutReset);
+    RUN_TEST(test_Writer_FailedBootSelectionWithChangedReadbackLocksOwner);
+    RUN_TEST(test_Writer_FailedBootSelectionEvenIfOldReadbackLocksOwner);
+    RUN_TEST(test_Writer_SuccessfulSdkReturnWithoutMatchingReadbackFailsClosed);
+    RUN_TEST(test_Writer_BootReadbackMissingOrAlreadySelectedSkipsMutation);
     RUN_TEST(test_Writer_AbortFailureRetainsOwnedHandleForRetry);
     RUN_TEST(test_Writer_NullInputOrEmptyWriteCannotMutate);
 }

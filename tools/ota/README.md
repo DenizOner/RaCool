@@ -118,3 +118,19 @@ and miss watchdog deadlines. A queued block alone cannot be treated as
 written, and the SDK does not expose a verified deferred-ACK API in the
 example. Until a bounded completion/response method is proven at the real
 SDK/device boundary, no flash worker is connected or transfer enabled.
+
+
+## Ambiguous boot-selection failure
+
+ESP-IDF 5.3.1 `esp_ota_set_boot_partition` may begin rewriting `otadata`
+before its final flash write returns an error. A non-OK result is therefore
+**not proof that the old boot choice was preserved**. `OtaImageWriter` reads
+`esp_ota_get_boot_partition()` before and after requesting a selection.
+It reports success only when both the SDK call succeeds and readback equals
+the validated inactive target. On any post-call error or conflicting readback,
+`boot_selection_uncertain` latches; further SelectBoot/Begin/Abort are
+blocked for the writer lifetime, with no automatic retry/reboot/otadata erase.
+Even unchanged readback does not clear a partial-write uncertainty. The
+owner/operator must investigate the physical boot state before recovery.
+This is a source-level and mocked-SDK guard; it is not physical power-loss
+proof.

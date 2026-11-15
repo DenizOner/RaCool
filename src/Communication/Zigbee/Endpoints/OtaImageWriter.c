@@ -114,14 +114,28 @@ esp_err_t OtaImageWriter_Verify(OtaImageWriter *writer) {
 esp_err_t OtaImageWriter_SelectBoot(OtaImageWriter *writer) {
     if (!writer) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (!writer->verified || writer->active ||
+    if (!writer->verified || writer->active || writer->failed ||
         writer->boot_selected || !writer->partition) return ESP_ERR_INVALID_STATE;
-    /* A verified signed image is necessary, but not enough to authorize
-     * reboot. An independent lifecycle owner schedules FINISH safely. */
+    /*
+     * A failed otadata write may partially change which slot will boot.
+     * Capture and verify the boot choice through the SDK; a set_boot return
+     * value alone does not prove that the intended slot was selected.
+     */
+    const esp_partition_t *before = esp_ota_get_boot_partition();
+    if (!before || before == writer->partition) return ESP_ERR_INVALID_STATE;
     esp_err_t result = esp_ota_set_boot_partition(
         (const esp_partition_t *)writer->partition);
-    if (result == ESP_OK) writer->boot_selected = true;
-    return result;
+    const esp_partition_t *after = esp_ota_get_boot_partition();
+    if (result != ESP_OK || after != writer->partition) {
+        writer->failed = true;
+        writer->boot_selection_uncertain = true;
+        /* Preserve evidence for the OTA owner: no blind retry, cleanup or
+         * reboot after an uncertain boot selection, even if readback matches
+         * the old slot. A separate, explicit recovery decision is required. */
+        return result != ESP_OK ? result : ESP_ERR_INVALID_STATE;
+    }
+    writer->boot_selected = true;
+    return ESP_OK;
 #else
     return ESP_ERR_NOT_SUPPORTED;
 #endif
@@ -130,7 +144,7 @@ esp_err_t OtaImageWriter_SelectBoot(OtaImageWriter *writer) {
 esp_err_t OtaImageWriter_Abort(OtaImageWriter *writer) {
     if (!writer) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (writer->boot_selected) return ESP_ERR_INVALID_STATE;
+    if (writer->boot_selected || writer->boot_selection_uncertain) return ESP_ERR_INVALID_STATE;
     esp_err_t result = ESP_OK;
     if (writer->active) result = esp_ota_abort((esp_ota_handle_t)writer->handle);
     /* On failure, preserve handle for controlled retry by its owner;

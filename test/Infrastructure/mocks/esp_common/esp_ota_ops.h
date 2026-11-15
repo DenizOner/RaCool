@@ -17,6 +17,7 @@ typedef enum {
     ESP_OTA_IMG_ABORTED, ESP_OTA_IMG_UNDEFINED
 } esp_ota_img_states_t;
 const esp_partition_t *esp_ota_get_running_partition(void);
+const esp_partition_t *esp_ota_get_boot_partition(void);
 esp_err_t esp_ota_get_state_partition(const esp_partition_t *, esp_ota_img_states_t *);
 bool esp_ota_check_rollback_is_possible(void);
 esp_err_t esp_ota_mark_app_valid_cancel_rollback(void);

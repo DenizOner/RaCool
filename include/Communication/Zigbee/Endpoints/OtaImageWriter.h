@@ -17,6 +17,8 @@ typedef struct {
     bool failed;
     bool verified;
     bool boot_selected;
+    /* Ambiguous SDK boot-selection result must not be cleaned up as success. */
+    bool boot_selection_uncertain;
 } OtaImageWriter;
 
 /* True only with software-only signed-app verification AND rollback enabled.
