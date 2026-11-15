@@ -25,6 +25,17 @@ Böyle bir durumda sonraki güvenlik kontrolleri hâlâ **BLOCKED** döner;
 retained mesaj taze sayılamaz, global ayar yazılamaz.
 Trafik gözlemi kapalı altı ZCL rapor aralığı kurtarması bu opt-in'i gerektirmez.
 
+**Onaylı canlı kabul sınırı:** `live_zigbee.mjs` için Issue #5 kapsamı,
+yalnız altı ZCL raporlama aralığının kontrollü **test MQTT istemcisi**
+bağlantı kesintisinden sonra koşullu geri yüklenmesi ve bağımsız taze ZCL
+wire son okumasıdır. Sunucunun **ortak** log seviyesini otomatik
+`info → debug → info` değiştirme veya geri yükleme davranışının canlı
+kabulü bu kapsama **dahil değildir**. Mevcut isteğe bağlı global tanılama
+kodunun bulunması kullanım yetkisi veya başarı kanıtı değildir: güvenli
+varsayılan ret, retained-only/yabancı değişiklik/belirsiz teslimde yazmama
+ve açık operatör yetkisi koşulları korunur. Yalnız test istemcisi kopması,
+broker/koordinatör çökmesi veya periyodik RF raporu teslimi değildir.
+
 `live_zigbee.mjs` bağlantı kesilince bekleyen bridge isteklerini başarısız
 sonlandırır, durum beklemelerini kapatır ve uzun işlemin temizlik blokları
 tamamlandıktan sonra sonuç JSON'unu yazar. Altı rapor aralığından biri seçilmiş
