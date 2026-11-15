@@ -6,7 +6,7 @@
 #include "Communication/Zigbee/Endpoints/OtaImageWriter.c"
 
 static esp_partition_t running, inactive;
-static bool haveTarget, haveRunning;
+static bool haveTarget, haveRunning, returnRunningSlot;
 static esp_err_t beginResult, writeResult, endResult, selectResult, abortResult;
 static int beginCalls, writeCalls, endCalls, selectCalls, abortCalls;
 static esp_ota_handle_t activeHandle;
@@ -15,7 +15,7 @@ static uint8_t data[4] = {0xE9, 1, 2, 3};
 
 const esp_partition_t *esp_ota_get_next_update_partition(const esp_partition_t *start) {
     TEST_ASSERT_NULL(start);
-    return haveTarget ? &inactive : NULL;
+    return haveTarget ? (returnRunningSlot ? &running : &inactive) : NULL;
 }
 const esp_partition_t *esp_ota_get_running_partition(void) {
     return haveRunning ? &running : NULL;
@@ -53,6 +53,7 @@ void setUp(void) {
     running = (esp_partition_t){.size=3000u};
     inactive = (esp_partition_t){.size=2000u};
     haveTarget = haveRunning = true;
+    returnRunningSlot = false;
     beginResult = writeResult = endResult = selectResult = abortResult = ESP_OK;
     beginCalls = writeCalls = endCalls = selectCalls = abortCalls = 0;
     activeHandle = (esp_ota_handle_t)42u;
@@ -63,6 +64,12 @@ void tearDown(void) {}
 void test_Writer_ValidatesSignatureGate(void) {
     TEST_ASSERT_TRUE(OtaImageWriter_SigningReady());
 }
+void test_Writer_RejectsRunningPartitionAsTarget(void) {
+    returnRunningSlot = true;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 100u));
+    TEST_ASSERT_EQUAL(0, beginCalls);
+}
+
 void test_Writer_StartRequiresInactiveSlotAndCapacity(void) {
     haveTarget = false;
     TEST_ASSERT_NOT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 100u));
@@ -147,6 +154,11 @@ void test_Writer_AbortFailureRetainsOwnedHandleForRetry(void) {
     abortResult = ESP_FAIL;
     TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageWriter_Abort(&writer));
     TEST_ASSERT_TRUE(writer.active);
+    TEST_ASSERT_TRUE(writer.failed);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Write(&writer, data, 4u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Verify(&writer));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(0, writeCalls);
     TEST_ASSERT_EQUAL(activeHandle, writer.handle);
     abortResult = ESP_OK;
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
@@ -168,6 +180,7 @@ void test_Writer_NullInputOrEmptyWriteCannotMutate(void) {
 void test_OtaImageWriter_All(void) {
     RUN_TEST(test_Writer_ValidatesSignatureGate);
     RUN_TEST(test_Writer_StartRequiresInactiveSlotAndCapacity);
+    RUN_TEST(test_Writer_RejectsRunningPartitionAsTarget);
     RUN_TEST(test_Writer_BeginFailureDoesNotAdmitWrite);
     RUN_TEST(test_Writer_SuccessRequiresCompleteVerifiedWriteBeforeBoot);
     RUN_TEST(test_Writer_IncompleteWriteAbortsAndNeverSelectsBoot);

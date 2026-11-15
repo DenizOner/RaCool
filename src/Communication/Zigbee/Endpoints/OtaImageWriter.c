@@ -2,6 +2,10 @@
 
 #include <string.h>
 
+#ifndef RACOOL_TEST_NATIVE
+#include "sdkconfig.h"
+#endif
+
 /* This is a hard build-time security boundary, not a runtime UI toggle.
  * Native host mocks exercise the authorized branch with their own fakes.
  * The current production SDK configuration is intentionally unsigned. */
@@ -9,7 +13,8 @@
      defined(CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT) && \
      defined(CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME) && \
      defined(CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE) && \
-     !defined(CONFIG_SECURE_BOOT)) || defined(RACOOL_OTA_WRITER_NATIVE_TEST)
+     !defined(CONFIG_SECURE_BOOT)) || (defined(RACOOL_TEST_NATIVE) && \
+     defined(RACOOL_OTA_WRITER_NATIVE_TEST))
 #define RACOOL_OTA_WRITER_SIGNED 1
 #else
 #define RACOOL_OTA_WRITER_SIGNED 0
@@ -30,7 +35,7 @@ bool OtaImageWriter_SigningReady(void) {
 esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
     if (!writer || !app_size) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (writer->active || writer->verified || writer->boot_selected)
+    if (writer->active || writer->failed || writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
 
     const esp_partition_t *target = esp_ota_get_next_update_partition(NULL);
@@ -48,6 +53,7 @@ esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
     writer->handle = (uintptr_t)handle;
     writer->expected_size = app_size;
     writer->received_size = 0;
+    writer->failed = false;
     writer->verified = false;
     writer->boot_selected = false;
     writer->active = true;
@@ -62,7 +68,7 @@ esp_err_t OtaImageWriter_Write(OtaImageWriter *writer,
                                const uint8_t *data, uint32_t length) {
     if (!writer || !data || !length) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (!writer->active || writer->verified || writer->boot_selected)
+    if (!writer->active || writer->failed || writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
     if (writer->received_size >= writer->expected_size ||
         length > writer->expected_size - writer->received_size) {
@@ -86,7 +92,7 @@ esp_err_t OtaImageWriter_Write(OtaImageWriter *writer,
 esp_err_t OtaImageWriter_Verify(OtaImageWriter *writer) {
     if (!writer) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (!writer->active || writer->verified || writer->boot_selected)
+    if (!writer->active || writer->failed || writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
     if (writer->received_size != writer->expected_size) {
         (void)OtaImageWriter_Abort(writer);
@@ -130,6 +136,7 @@ esp_err_t OtaImageWriter_Abort(OtaImageWriter *writer) {
     /* On failure, preserve handle for controlled retry by its owner;
      * never claim a canceled flash operation when SDK cleanup failed. */
     if (result == ESP_OK) OtaWriter_Reset(writer);
+    else writer->failed = true;
     return result;
 #else
     return ESP_ERR_NOT_SUPPORTED;

@@ -14,6 +14,7 @@ typedef struct {
     uintptr_t handle;
     const void *partition;
     bool active;
+    bool failed;
     bool verified;
     bool boot_selected;
 } OtaImageWriter;
