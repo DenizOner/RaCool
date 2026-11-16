@@ -58,7 +58,13 @@ esp_err_t OtaImageStream_Consume(OtaImageStream *stream, uint32_t offset,
                                                sizeof(stream->prefix), &image_bytes))
                 return StreamFail(stream, ESP_ERR_INVALID_ARG);
             esp_err_t result = stream->ops.begin(stream->ctx, image_bytes);
-            if (result != ESP_OK) return StreamFail(stream, result);
+            if (result != ESP_OK) {
+                /* A failed Begin may follow a partial flash erase, yet there
+                 * is no valid backend handle we can safely abort. Latch the
+                 * uncertain state; Cancel must not clear it for a retry. */
+                stream->cleanup_uncertain = true;
+                return StreamFail(stream, result);
+            }
             stream->begun = true;
             stream->image_bytes = image_bytes;
             /* The byte used to validate the ESP header is also the first

@@ -378,6 +378,29 @@ void test_WriterStream_WriteFailureAbortsExactlyOnceAndAllowsNewTransfer(void) {
     TEST_ASSERT_EQUAL(1, abortCalls);
     TEST_ASSERT_EQUAL(1, selectCalls);
 }
+void test_WriterStream_BeginFailureCannotBeCanceledIntoFalseRecovery(void) {
+    OtaImageStream stream = {0};
+    uint8_t file[69];
+    setupWriterStream(&stream, file);
+    beginResult = ESP_FAIL;
+    TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageStream_Consume(&stream, 0u, file, 69u));
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_uncertain);
+    TEST_ASSERT_FALSE(stream.begun);
+    TEST_ASSERT_FALSE(stream.cleanup_attempted);
+    TEST_ASSERT_TRUE(writer.failed);
+    TEST_ASSERT_FALSE(writer.active);
+    TEST_ASSERT_EQUAL(1, beginCalls);
+    TEST_ASSERT_EQUAL(0, abortCalls);
+    TEST_ASSERT_EQUAL(0, writeCalls);
+    beginResult = ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
+        OtaImageStream_Consume(&stream, 67u, file+67, 2u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 3u));
+    TEST_ASSERT_EQUAL(1, beginCalls);
+    TEST_ASSERT_EQUAL(0, abortCalls);
+}
 void test_WriterStream_AbortFailureNeverRetriesLostHandle(void) {
     OtaImageStream stream = {0};
     uint8_t file[69];
@@ -419,6 +442,7 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_WriterStream_SuccessfulImageWritesVerifiesAndSelectsOnlyOnce);
     RUN_TEST(test_WriterStream_WriteFailureAbortsExactlyOnceAndAllowsNewTransfer);
     RUN_TEST(test_WriterStream_AbortFailureNeverRetriesLostHandle);
+    RUN_TEST(test_WriterStream_BeginFailureCannotBeCanceledIntoFalseRecovery);
 }
 #ifndef RACOOL_TARGET_TESTING
 int main(void) {

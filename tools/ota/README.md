@@ -154,6 +154,11 @@ can be reset by blindly resending Begin or Abort. `OtaImageStream` calls
 backend abort at most once after a failed transfer or explicit cancellation.
 A successful cleanup may be cleared by an explicit stream Cancel; an
 uncertain cleanup remains terminal, and it cannot claim transfer success.
+A failed backend Begin is **also** cleanup-uncertain: ESP-IDF may already
+have erased some of the inactive slot, and without a returned OTA handle
+Abort cannot safely undo the operation. Stream Cancel must not clear this
+state or permit another transfer. The native stream+writer test covers
+that failure without performing real flash mutations.
 This does not change the fail-closed EP10 production callback or establish
 physical flash/NVS recovery evidence.
 

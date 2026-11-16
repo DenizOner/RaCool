@@ -108,11 +108,22 @@ void test_Stream_IncompleteDownloadAbortsBackend(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Check(&stream));
     TEST_ASSERT_EQUAL(1,abortCalls);TEST_ASSERT_EQUAL(0,verifyCalls);
 }
-void test_Stream_FlashBeginFailureStopsTransfer(void) {
+void test_Stream_FlashBeginFailureStopsTransferAndCannotBeCleared(void) {
     beginResult=ESP_FAIL;
     TEST_ASSERT_EQUAL(ESP_OK,start());
     TEST_ASSERT_EQUAL(ESP_FAIL,OtaImageStream_Consume(&stream,0,file,67u));
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_uncertain);
+    TEST_ASSERT_FALSE(stream.begun);
+    TEST_ASSERT_FALSE(stream.cleanup_attempted);
     TEST_ASSERT_EQUAL(1,beginCalls);TEST_ASSERT_EQUAL(0,writeCalls);
+    TEST_ASSERT_EQUAL(0,abortCalls);
+    beginResult=ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,start());
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
+        OtaImageStream_Consume(&stream,67u,file+67,2u));
+    TEST_ASSERT_EQUAL(1,beginCalls);
     TEST_ASSERT_EQUAL(0,abortCalls);
 }
 void test_Stream_FlashWriteFailureAbortsBackend(void) {
@@ -208,7 +219,7 @@ void test_OtaImageStream_All(void) {
     RUN_TEST(test_Stream_WrongHeaderNeverStartsFlash);
     RUN_TEST(test_Stream_StartupRejectsOldOrForeignOffer);
     RUN_TEST(test_Stream_IncompleteDownloadAbortsBackend);
-    RUN_TEST(test_Stream_FlashBeginFailureStopsTransfer);
+    RUN_TEST(test_Stream_FlashBeginFailureStopsTransferAndCannotBeCleared);
     RUN_TEST(test_Stream_FlashWriteFailureAbortsBackend);
     RUN_TEST(test_Stream_VerificationFailureCannotSelectBoot);
     RUN_TEST(test_Stream_BootSelectionFailureNeverSignalsSuccess);

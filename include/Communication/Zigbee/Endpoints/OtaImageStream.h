@@ -31,6 +31,8 @@ typedef struct {
     bool selected;
     bool failed;
     bool cleanup_attempted;
+    /* A failed Begin (possibly after erase) or failed Abort is terminal.
+     * Without owner-directed recovery, Cancel must not erase this evidence. */
     bool cleanup_uncertain;
 } OtaImageStream;
 
