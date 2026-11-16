@@ -13,6 +13,7 @@ static bool haveBootReadback, selectActuallyChangesBoot;
 static esp_err_t beginResult, writeResult, endResult, selectResult, abortResult;
 static int beginCalls, writeCalls, endCalls, selectCalls, abortCalls;
 static esp_ota_handle_t activeHandle;
+static size_t beginImageMode;
 static const esp_partition_t *bootPartition;
 static OtaImageWriter writer;
 static uint8_t data[4] = {0xE9, 1, 2, 3};
@@ -29,7 +30,8 @@ const esp_partition_t *esp_ota_get_boot_partition(void) {
 }
 esp_err_t esp_ota_begin(const esp_partition_t *target, size_t size, esp_ota_handle_t *handle) {
     TEST_ASSERT_EQUAL_PTR(&inactive, target);
-    TEST_ASSERT_TRUE(size <= inactive.size);
+    TEST_ASSERT_EQUAL((size_t)OTA_WITH_SEQUENTIAL_WRITES, size);
+    beginImageMode = size;
     beginCalls++;
     if (beginResult == ESP_OK) *handle = activeHandle;
     return beginResult;
@@ -66,6 +68,7 @@ void setUp(void) {
     bootPartition = &running;
     beginResult = writeResult = endResult = selectResult = abortResult = ESP_OK;
     beginCalls = writeCalls = endCalls = selectCalls = abortCalls = 0;
+    beginImageMode = 0u;
     activeHandle = (esp_ota_handle_t)42u;
     writer = (OtaImageWriter){0};
 }
@@ -73,6 +76,38 @@ void tearDown(void) {}
 
 void test_Writer_ValidatesSignatureGate(void) {
     TEST_ASSERT_TRUE(OtaImageWriter_SigningReady());
+}
+void test_Writer_BeginUsesSequentialEraseWithVerifiedAppLength(void) {
+    /* Caller knows the exact size, but IDF Begin must not bulk-erase it.
+     * The writer independently preserves the true payload boundary. */
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 512u));
+    TEST_ASSERT_EQUAL((size_t)OTA_WITH_SEQUENTIAL_WRITES, beginImageMode);
+    TEST_ASSERT_EQUAL_UINT32(512u, writer.expected_size);
+    TEST_ASSERT_EQUAL_UINT32(0u, writer.received_size);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+}
+void test_Writer_RejectsOversizedWriteBeforeFlashMutation(void) {
+    uint8_t payload[256] = {0xE9u};
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 512u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        OtaImageWriter_Write(&writer, payload, sizeof(payload)));
+    TEST_ASSERT_TRUE(writer.write_failed);
+    TEST_ASSERT_EQUAL(0, writeCalls);
+    TEST_ASSERT_EQUAL_UINT32(0u, writer.received_size);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Verify(&writer));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+}
+void test_Writer_AcceptsMaximumZigbeeBlockSequentially(void) {
+    uint8_t payload[255] = {0xE9u};
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, sizeof(payload)));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Write(&writer, payload, sizeof(payload)));
+    TEST_ASSERT_EQUAL(1, writeCalls);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(payload), writer.received_size);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Verify(&writer));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(1, selectCalls);
 }
 void test_Writer_RejectsRunningPartitionAsTarget(void) {
     returnRunningSlot = true;
@@ -467,6 +502,9 @@ void test_WriterStream_AbortFailureNeverRetriesLostHandle(void) {
 }
 void test_OtaImageWriter_All(void) {
     RUN_TEST(test_Writer_ValidatesSignatureGate);
+    RUN_TEST(test_Writer_BeginUsesSequentialEraseWithVerifiedAppLength);
+    RUN_TEST(test_Writer_RejectsOversizedWriteBeforeFlashMutation);
+    RUN_TEST(test_Writer_AcceptsMaximumZigbeeBlockSequentially);
     RUN_TEST(test_Writer_StartRequiresInactiveSlotAndCapacity);
     RUN_TEST(test_Writer_RejectsRunningPartitionAsTarget);
     RUN_TEST(test_Writer_BeginFailureDoesNotAdmitWrite);

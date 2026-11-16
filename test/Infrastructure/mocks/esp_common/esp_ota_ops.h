@@ -5,6 +5,7 @@
 #include <stddef.h>
 typedef struct esp_partition_t { unsigned int size; int sentinel; } esp_partition_t;
 typedef unsigned int esp_ota_handle_t;
+#define OTA_WITH_SEQUENTIAL_WRITES 0xFFFFFFFEu
 const esp_partition_t *esp_ota_get_next_update_partition(const esp_partition_t *);
 esp_err_t esp_ota_begin(const esp_partition_t *, size_t, esp_ota_handle_t *);
 esp_err_t esp_ota_write(esp_ota_handle_t, const void *, size_t);

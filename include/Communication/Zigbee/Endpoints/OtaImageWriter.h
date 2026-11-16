@@ -23,6 +23,11 @@ typedef struct {
     bool boot_selection_uncertain;
 } OtaImageWriter;
 
+/* Each Write accepts at most one Zigbee OTA transport block (1..255 bytes).
+ * This bounds the incremental ESP-IDF erase to one 4 KiB sector per call.
+ * It is not a measured watchdog or Zigbee callback timing guarantee. */
+#define RACOOL_OTA_WRITER_MAX_CHUNK_BYTES UINT8_MAX
+
 /* Write/Verify failures do not abort their own SDK handle. The sole stream
  * owner must call Abort once after a failure, then keep the failed session
  * closed. A failed Abort or failed Begin is terminal until owner recovery. */

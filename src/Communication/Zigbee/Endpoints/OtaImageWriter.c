@@ -49,9 +49,12 @@ esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
         return ESP_ERR_INVALID_STATE;
 
     esp_ota_handle_t handle = 0;
-    /* Exact size bounds erase work. This may take time; never call from an
-     * SDK/timer/ISR callback or while holding the Zigbee lock. */
-    esp_err_t result = esp_ota_begin(target, app_size, &handle);
+    /* Keep the checked app_size in this writer, but do not bulk erase the
+     * multi-MiB slot in Begin. In IDF 5.3.1 this mode defers erase to each
+     * sequential esp_ota_write; limiting Write to 255 bytes below bounds
+     * each SDK call to at most one 4 KiB sector erase. Neither operation
+     * belongs in a Zigbee SDK callback, ISR or service lock. */
+    esp_err_t result = esp_ota_begin(target, OTA_WITH_SEQUENTIAL_WRITES, &handle);
     if (result != ESP_OK) {
         /* IDF may have partially erased the inactive slot before reporting
          * failure; do not blindly repeat a mutating Begin on this writer. */
@@ -83,6 +86,7 @@ esp_err_t OtaImageWriter_Write(OtaImageWriter *writer,
         writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
     if (writer->received_size >= writer->expected_size ||
+        length > RACOOL_OTA_WRITER_MAX_CHUNK_BYTES ||
         length > writer->expected_size - writer->received_size) {
         /* Do not mutate the SDK handle here: the stream owns the one
          * cancellation attempt. Never write or verify after this error. */

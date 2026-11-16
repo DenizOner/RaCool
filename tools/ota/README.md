@@ -76,6 +76,18 @@ on update **and** bootloader rollback. A host-only test flag exercises the
 signed path with fake ESP-IDF operations; those tests do not modify flash
 or validate a genuine RSA signature.
 
+The writer now requests IDF 5.3.1's `OTA_WITH_SEQUENTIAL_WRITES`
+mode, rather than erasing the entire application at Begin. This mode
+incrementally erases the affected 4 KiB sector(s) when `esp_ota_write`
+is called. The writer retains the validated exact app size independently;
+a single Write is limited to 255 bytes, so it can only trigger one new
+sector erase per call. Invalid 256+ byte calls fail before any flash write
+and permanently reject subsequent writes until the stream owner aborts.
+The host tests assert the actual ESP-IDF Begin mode, app-size accounting
+and both sides of the maximum block boundary. This is a latency-risk
+reduction, NOT physical timing/WDT evidence or a safe synchronous OTA
+callback solution. The signed-only gate remains unchanged.
+
 The Zigbee progress callback deliberately does not invoke this writer.
 Long partition erases and flash writes must be owned by a bounded worker
 outside Zigbee SDK locks, and the callback must not acknowledge each block as
