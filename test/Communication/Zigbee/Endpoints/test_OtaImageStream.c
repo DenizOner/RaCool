@@ -141,14 +141,48 @@ void test_Stream_BootSelectionFailureNeverSignalsSuccess(void) {
 void test_Stream_CancelAfterBackendAbortFailureBlocksReuse(void) {
     TEST_ASSERT_EQUAL(ESP_OK,start());
     TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Consume(&stream,0,file,67u));
-    abortResult=ESP_FAIL;
-    TEST_ASSERT_EQUAL(ESP_FAIL,OtaImageStream_Cancel(&stream));
+    abortResult=ESP_ERR_NOT_FOUND;
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND,OtaImageStream_Cancel(&stream));
     TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_attempted);
+    TEST_ASSERT_TRUE(stream.cleanup_uncertain);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Consume(&stream,67,file+67,2u));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,start());
     abortResult=ESP_OK;
-    TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(1,abortCalls);
+}
+void test_Stream_TransferErrorCleansUpExactlyOnce(void) {
     TEST_ASSERT_EQUAL(ESP_OK,start());
+    TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Consume(&stream,0,file,67u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Consume(&stream,0,file,2u));
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_attempted);
+    TEST_ASSERT_FALSE(stream.cleanup_uncertain);
+    TEST_ASSERT_EQUAL(1,abortCalls);
+    TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(1,abortCalls);
+    TEST_ASSERT_EQUAL(ESP_OK,start());
+}
+void test_Stream_TransferErrorWithAbortFailureIsTerminal(void) {
+    TEST_ASSERT_EQUAL(ESP_OK,start());
+    TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Consume(&stream,0,file,67u));
+    abortResult=ESP_ERR_NOT_FOUND;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,OtaImageStream_Consume(&stream,0,file,2u));
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_uncertain);
+    abortResult=ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,start());
+    TEST_ASSERT_EQUAL(1,abortCalls);
+}
+void test_Stream_ExplicitCancelAfterBegunCleansUpOnce(void) {
+    TEST_ASSERT_EQUAL(ESP_OK,start());
+    TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Consume(&stream,0,file,67u));
+    TEST_ASSERT_EQUAL(ESP_OK,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(1,abortCalls);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(1,abortCalls);
 }
 void test_Stream_NoCancelAfterBootSlotSelected(void) {
     TEST_ASSERT_EQUAL(ESP_OK,start());
@@ -179,6 +213,9 @@ void test_OtaImageStream_All(void) {
     RUN_TEST(test_Stream_VerificationFailureCannotSelectBoot);
     RUN_TEST(test_Stream_BootSelectionFailureNeverSignalsSuccess);
     RUN_TEST(test_Stream_CancelAfterBackendAbortFailureBlocksReuse);
+    RUN_TEST(test_Stream_TransferErrorCleansUpExactlyOnce);
+    RUN_TEST(test_Stream_TransferErrorWithAbortFailureIsTerminal);
+    RUN_TEST(test_Stream_ExplicitCancelAfterBegunCleansUpOnce);
     RUN_TEST(test_Stream_NoCancelAfterBootSlotSelected);
     RUN_TEST(test_Stream_RejectNullBadInputs);
 }

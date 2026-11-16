@@ -51,7 +51,12 @@ esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
     /* Exact size bounds erase work. This may take time; never call from an
      * SDK/timer/ISR callback or while holding the Zigbee lock. */
     esp_err_t result = esp_ota_begin(target, app_size, &handle);
-    if (result != ESP_OK) return result;
+    if (result != ESP_OK) {
+        /* IDF may have partially erased the inactive slot before reporting
+         * failure; do not blindly repeat a mutating Begin on this writer. */
+        writer->failed = true;
+        return result;
+    }
 
     writer->partition = target;
     writer->handle = (uintptr_t)handle;
@@ -154,11 +159,13 @@ esp_err_t OtaImageWriter_SelectBoot(OtaImageWriter *writer) {
 esp_err_t OtaImageWriter_Abort(OtaImageWriter *writer) {
     if (!writer) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (writer->boot_selected || writer->boot_selection_uncertain) return ESP_ERR_INVALID_STATE;
+    if (writer->failed || writer->boot_selected ||
+        writer->boot_selection_uncertain) return ESP_ERR_INVALID_STATE;
     esp_err_t result = ESP_OK;
     if (writer->active) result = esp_ota_abort((esp_ota_handle_t)writer->handle);
-    /* On failure, preserve handle for controlled retry by its owner;
-     * never claim a canceled flash operation when SDK cleanup failed. */
+    /* IDF 5.3.1 returns NOT_FOUND if the handle no longer exists. After
+     * any abort error, retain diagnostic state but never reuse/retry the
+     * possibly stale handle without a separate recovery procedure. */
     if (result == ESP_OK) OtaWriter_Reset(writer);
     else writer->failed = true;
     return result;

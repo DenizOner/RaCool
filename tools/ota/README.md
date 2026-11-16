@@ -141,3 +141,18 @@ boot, even though it is not the running partition. A missing boot readback
 also prevents flash mutation. If that choice changes/becomes unreadable
 between Begin and SelectBoot, selection and cleanup are latched as uncertain
 without attempting another otadata write.
+
+
+## Failed begin and cancellation ownership
+
+ESP-IDF 5.3.1 `esp_ota_begin` performs flash erase before returning its
+handle, and `esp_ota_abort` returns `ESP_ERR_NOT_FOUND` when a handle is
+already invalid. Therefore a failed Begin may leave partially erased
+inactive flash, and a failed Abort may have no valid handle to retry.
+`OtaImageWriter` latches such failures for the session; neither failure
+can be reset by blindly resending Begin or Abort. `OtaImageStream` calls
+backend abort at most once after a failed transfer or explicit cancellation.
+A successful cleanup may be cleared by an explicit stream Cancel; an
+uncertain cleanup remains terminal, and it cannot claim transfer success.
+This does not change the fail-closed EP10 production callback or establish
+physical flash/NVS recovery evidence.

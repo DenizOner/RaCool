@@ -6,9 +6,13 @@
 
 static esp_err_t StreamFail(OtaImageStream *stream, esp_err_t reason) {
     stream->failed = true;
-    /* Clean up an active writer, even after a truncated/malformed transfer.
-     * A failed abort retains the backend's owned handle for controlled cleanup. */
-    if (stream->begun) (void)stream->ops.abort(stream->ctx);
+    /* Abort the backend at most once. A failed abort cannot be interpreted
+     * as completed cleanup and must never be retried blindly. */
+    if (stream->begun && !stream->cleanup_attempted) {
+        stream->cleanup_attempted = true;
+        if (stream->ops.abort(stream->ctx) != ESP_OK)
+            stream->cleanup_uncertain = true;
+    }
     return reason;
 }
 
@@ -105,11 +109,14 @@ esp_err_t OtaImageStream_Apply(OtaImageStream *stream) {
 
 esp_err_t OtaImageStream_Cancel(OtaImageStream *stream) {
     if (!stream) return ESP_ERR_INVALID_ARG;
-    if (!stream->active || stream->selected) return ESP_ERR_INVALID_STATE;
-    if (stream->begun) {
+    if (!stream->active || stream->selected ||
+        stream->cleanup_uncertain) return ESP_ERR_INVALID_STATE;
+    if (stream->begun && !stream->cleanup_attempted) {
+        stream->cleanup_attempted = true;
         esp_err_t result = stream->ops.abort(stream->ctx);
         if (result != ESP_OK) {
             stream->failed = true;
+            stream->cleanup_uncertain = true;
             return result;
         }
     }

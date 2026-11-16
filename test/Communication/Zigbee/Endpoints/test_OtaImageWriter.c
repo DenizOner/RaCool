@@ -94,8 +94,14 @@ void test_Writer_StartRequiresInactiveSlotAndCapacity(void) {
 void test_Writer_BeginFailureDoesNotAdmitWrite(void) {
     beginResult = ESP_FAIL;
     TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_TRUE(writer.failed);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Write(&writer, data, 4u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    beginResult = ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(1, beginCalls);
     TEST_ASSERT_EQUAL(0, writeCalls);
+    TEST_ASSERT_EQUAL(0, abortCalls);
 }
 void test_Writer_SuccessRequiresCompleteVerifiedWriteBeforeBoot(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
@@ -214,10 +220,10 @@ void test_Writer_BootChoiceChangedBeforeSelectLocksOwner(void) {
     TEST_ASSERT_EQUAL(0, selectCalls);
     TEST_ASSERT_EQUAL(0, abortCalls);
 }
-void test_Writer_AbortFailureRetainsOwnedHandleForRetry(void) {
+void test_Writer_AbortMissingHandleMustNotBeRetried(void) {
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 4u));
-    abortResult = ESP_FAIL;
-    TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageWriter_Abort(&writer));
+    abortResult = ESP_ERR_NOT_FOUND;
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, OtaImageWriter_Abort(&writer));
     TEST_ASSERT_TRUE(writer.active);
     TEST_ASSERT_TRUE(writer.failed);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Write(&writer, data, 4u));
@@ -226,9 +232,20 @@ void test_Writer_AbortFailureRetainsOwnedHandleForRetry(void) {
     TEST_ASSERT_EQUAL(0, writeCalls);
     TEST_ASSERT_EQUAL(activeHandle, writer.handle);
     abortResult = ESP_OK;
-    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
-    TEST_ASSERT_FALSE(writer.active);
-    TEST_ASSERT_EQUAL(2, abortCalls);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+}
+void test_Writer_WriteErrorWithFailedAbortCannotBeRetried(void) {
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 4u));
+    writeResult = ESP_FAIL;
+    abortResult = ESP_ERR_NOT_FOUND;
+    TEST_ASSERT_EQUAL(ESP_FAIL, OtaImageWriter_Write(&writer, data, 4u));
+    TEST_ASSERT_TRUE(writer.failed);
+    writeResult = abortResult = ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Write(&writer, data, 4u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+    TEST_ASSERT_EQUAL(1, writeCalls);
 }
 void test_Writer_NullInputOrEmptyWriteCannotMutate(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, OtaImageWriter_Begin(NULL, 4u));
@@ -258,7 +275,8 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_Writer_BeginCannotErasePreviouslySelectedBootSlot);
     RUN_TEST(test_Writer_MissingBootReadbackAtSelectLocksOwner);
     RUN_TEST(test_Writer_BootChoiceChangedBeforeSelectLocksOwner);
-    RUN_TEST(test_Writer_AbortFailureRetainsOwnedHandleForRetry);
+    RUN_TEST(test_Writer_AbortMissingHandleMustNotBeRetried);
+    RUN_TEST(test_Writer_WriteErrorWithFailedAbortCannotBeRetried);
     RUN_TEST(test_Writer_NullInputOrEmptyWriteCannotMutate);
 }
 #ifndef RACOOL_TARGET_TESTING

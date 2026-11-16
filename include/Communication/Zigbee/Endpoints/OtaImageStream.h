@@ -30,6 +30,8 @@ typedef struct {
     bool verified;
     bool selected;
     bool failed;
+    bool cleanup_attempted;
+    bool cleanup_uncertain;
 } OtaImageStream;
 
 esp_err_t OtaImageStream_Start(OtaImageStream *stream,
