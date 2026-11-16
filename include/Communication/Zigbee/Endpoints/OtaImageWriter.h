@@ -15,11 +15,17 @@ typedef struct {
     const void *partition;
     bool active;
     bool failed;
+    /* A write/length failure forbids further writes but allows one Abort. */
+    bool write_failed;
     bool verified;
     bool boot_selected;
     /* Ambiguous SDK boot-selection result must not be cleaned up as success. */
     bool boot_selection_uncertain;
 } OtaImageWriter;
+
+/* Write/Verify failures do not abort their own SDK handle. The sole stream
+ * owner must call Abort once after a failure, then keep the failed session
+ * closed. A failed Abort or failed Begin is terminal until owner recovery. */
 
 /* True only with software-only signed-app verification AND rollback enabled.
  * The unsigned production build is deliberately non-mutating. */

@@ -35,7 +35,8 @@ bool OtaImageWriter_SigningReady(void) {
 esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
     if (!writer || !app_size) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (writer->active || writer->failed || writer->verified || writer->boot_selected)
+    if (writer->active || writer->failed || writer->write_failed ||
+        writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
 
     const esp_partition_t *target = esp_ota_get_next_update_partition(NULL);
@@ -63,6 +64,7 @@ esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
     writer->expected_size = app_size;
     writer->received_size = 0;
     writer->failed = false;
+    writer->write_failed = false;
     writer->verified = false;
     writer->boot_selected = false;
     writer->active = true;
@@ -77,17 +79,20 @@ esp_err_t OtaImageWriter_Write(OtaImageWriter *writer,
                                const uint8_t *data, uint32_t length) {
     if (!writer || !data || !length) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (!writer->active || writer->failed || writer->verified || writer->boot_selected)
+    if (!writer->active || writer->failed || writer->write_failed ||
+        writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
     if (writer->received_size >= writer->expected_size ||
         length > writer->expected_size - writer->received_size) {
-        (void)OtaImageWriter_Abort(writer);
+        /* Do not mutate the SDK handle here: the stream owns the one
+         * cancellation attempt. Never write or verify after this error. */
+        writer->write_failed = true;
         return ESP_ERR_INVALID_ARG;
     }
     esp_err_t result = esp_ota_write((esp_ota_handle_t)writer->handle,
                                      data, (size_t)length);
     if (result != ESP_OK) {
-        (void)OtaImageWriter_Abort(writer);
+        writer->write_failed = true;
         return result;
     }
     writer->received_size += length;
@@ -101,10 +106,13 @@ esp_err_t OtaImageWriter_Write(OtaImageWriter *writer,
 esp_err_t OtaImageWriter_Verify(OtaImageWriter *writer) {
     if (!writer) return ESP_ERR_INVALID_ARG;
 #if RACOOL_OTA_WRITER_SIGNED
-    if (!writer->active || writer->failed || writer->verified || writer->boot_selected)
+    if (!writer->active || writer->failed || writer->write_failed ||
+        writer->verified || writer->boot_selected)
         return ESP_ERR_INVALID_STATE;
     if (writer->received_size != writer->expected_size) {
-        (void)OtaImageWriter_Abort(writer);
+        /* Stream.Check is responsible for Abort; otherwise incomplete
+         * verification would cause a hidden second SDK cancellation. */
+        writer->write_failed = true;
         return ESP_ERR_INVALID_STATE;
     }
     /* esp_ota_end owns validation and ALWAYS frees the handle on return.

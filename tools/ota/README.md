@@ -156,3 +156,16 @@ A successful cleanup may be cleared by an explicit stream Cancel; an
 uncertain cleanup remains terminal, and it cannot claim transfer success.
 This does not change the fail-closed EP10 production callback or establish
 physical flash/NVS recovery evidence.
+
+## Single cancellation owner between stream and ESP-IDF writer
+
+`OtaImageStream` owns exactly one abort request after a failed block or
+incomplete Verify. `OtaImageWriter_Write` and incomplete `Verify` mark
+`write_failed` to reject additional data/verification, but **do not**
+abort the SDK handle themselves. This avoids two abort requests when a flash
+write fails and lets a successful stream-owned cleanup be distinguished from
+an uncertain cleanup. A standalone writer caller must explicitly call
+`OtaImageWriter_Abort` after such failure. The host integration tests
+exercise the real stream and writer together, including failed writes,
+successful recovery after cleanup, and lost-handle failures; no real flash
+or cryptographic signature is exercised by those tests.
