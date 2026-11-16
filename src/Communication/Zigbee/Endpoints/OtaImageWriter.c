@@ -115,12 +115,14 @@ esp_err_t OtaImageWriter_Verify(OtaImageWriter *writer) {
         writer->write_failed = true;
         return ESP_ERR_INVALID_STATE;
     }
-    /* esp_ota_end owns validation and ALWAYS frees the handle on return.
-     * Signed-app verification is required above, never replaced by a CRC. */
+    /* ESP-IDF frees a found OTA handle even when image verification fails.
+     * NOT_FOUND returns before that cleanup: a missing handle is an ownership
+     * violation, not evidence of a safely closed writer session. */
     esp_err_t result = esp_ota_end((esp_ota_handle_t)writer->handle);
     writer->handle = 0;
     writer->active = false;
     if (result == ESP_OK) writer->verified = true;
+    else if (result == ESP_ERR_NOT_FOUND) writer->failed = true;
     else OtaWriter_Reset(writer);
     return result;
 #else

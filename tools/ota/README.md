@@ -170,7 +170,13 @@ incomplete Verify. `OtaImageWriter_Write` and incomplete `Verify` mark
 abort the SDK handle themselves. This avoids two abort requests when a flash
 write fails and lets a successful stream-owned cleanup be distinguished from
 an uncertain cleanup. A standalone writer caller must explicitly call
-`OtaImageWriter_Abort` after such failure. The host integration tests
+`OtaImageWriter_Abort` after such failure. ESP-IDF 5.3.1's
+`esp_ota_end` frees a **found** OTA handle even if signature or image
+validation fails; `ESP_ERR_NOT_FOUND` exits before that cleanup and
+cannot be treated as a verified release of ownership. The writer
+latches this exceptional result and stream cleanup remains uncertain.
+Ordinary verification failures with a found handle still permit a
+subsequent explicitly started transfer after the SDK release. The host integration tests
 exercise the real stream and writer together, including failed writes,
 successful recovery after cleanup, and lost-handle failures; no real flash
 or cryptographic signature is exercised by those tests.

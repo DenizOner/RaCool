@@ -169,6 +169,27 @@ void test_Writer_CryptographicEndFailureCannotSelectBoot(void) {
     TEST_ASSERT_EQUAL(1, endCalls);
     TEST_ASSERT_EQUAL(0, abortCalls);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(0, abortCalls);
+}
+void test_Writer_MissingHandleOnVerifyCannotBeResetOrRetried(void) {
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Write(&writer, data, 4u));
+    endResult = ESP_ERR_NOT_FOUND;
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, OtaImageWriter_Verify(&writer));
+    TEST_ASSERT_TRUE(writer.failed);
+    TEST_ASSERT_FALSE(writer.active);
+    TEST_ASSERT_FALSE(writer.verified);
+    TEST_ASSERT_EQUAL(0, writer.handle);
+    endResult = ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Verify(&writer));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(1, beginCalls);
+    TEST_ASSERT_EQUAL(1, endCalls);
+    TEST_ASSERT_EQUAL(0, selectCalls);
+    TEST_ASSERT_EQUAL(0, abortCalls);
 }
 static void writeAndVerify(void) {
     TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Begin(&writer, 4u));
@@ -378,6 +399,30 @@ void test_WriterStream_WriteFailureAbortsExactlyOnceAndAllowsNewTransfer(void) {
     TEST_ASSERT_EQUAL(1, abortCalls);
     TEST_ASSERT_EQUAL(1, selectCalls);
 }
+void test_WriterStream_MissingHandleAtVerifyBlocksNewTransfer(void) {
+    OtaImageStream stream = {0};
+    uint8_t file[69];
+    setupWriterStream(&stream, file);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Consume(&stream, 0u, file, 69u));
+    TEST_ASSERT_EQUAL(1, beginCalls);
+    TEST_ASSERT_EQUAL(2, writeCalls);
+    endResult = ESP_ERR_NOT_FOUND;
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, OtaImageStream_Check(&stream));
+    TEST_ASSERT_TRUE(writer.failed);
+    TEST_ASSERT_FALSE(writer.active);
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_attempted);
+    TEST_ASSERT_TRUE(stream.cleanup_uncertain);
+    endResult = ESP_OK;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
+        OtaImageStream_Consume(&stream, 69u, file, 1u));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 3u));
+    TEST_ASSERT_EQUAL(1, beginCalls);
+    TEST_ASSERT_EQUAL(1, endCalls);
+    TEST_ASSERT_EQUAL(0, abortCalls);
+    TEST_ASSERT_EQUAL(0, selectCalls);
+}
 void test_WriterStream_BeginFailureCannotBeCanceledIntoFalseRecovery(void) {
     OtaImageStream stream = {0};
     uint8_t file[69];
@@ -430,6 +475,7 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_Writer_OverrunLeavesAbortToOwnerWithoutWritingExtraBytes);
     RUN_TEST(test_Writer_WriteFailureBlocksWritesUntilOwnerAbort);
     RUN_TEST(test_Writer_CryptographicEndFailureCannotSelectBoot);
+    RUN_TEST(test_Writer_MissingHandleOnVerifyCannotBeResetOrRetried);
     RUN_TEST(test_Writer_FailedBootSelectionWithChangedReadbackLocksOwner);
     RUN_TEST(test_Writer_FailedBootSelectionEvenIfOldReadbackLocksOwner);
     RUN_TEST(test_Writer_SuccessfulSdkReturnWithoutMatchingReadbackFailsClosed);
@@ -443,6 +489,7 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_WriterStream_WriteFailureAbortsExactlyOnceAndAllowsNewTransfer);
     RUN_TEST(test_WriterStream_AbortFailureNeverRetriesLostHandle);
     RUN_TEST(test_WriterStream_BeginFailureCannotBeCanceledIntoFalseRecovery);
+    RUN_TEST(test_WriterStream_MissingHandleAtVerifyBlocksNewTransfer);
 }
 #ifndef RACOOL_TARGET_TESTING
 int main(void) {
