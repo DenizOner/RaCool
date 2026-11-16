@@ -481,6 +481,88 @@ void test_WriterStream_BeginFailureCannotBeCanceledIntoFalseRecovery(void) {
     TEST_ASSERT_EQUAL(1, beginCalls);
     TEST_ASSERT_EQUAL(0, abortCalls);
 }
+/* Reproduce the late/duplicated 50-byte OTA blocks reported against SDK
+ * 2.0.5 (#934) with the real stream -> writer composition. This asserts
+ * only local fail-closed behavior; SDK retransmission remains unproven. */
+static void setupLongWriterStream(OtaImageStream *stream, uint8_t file[266]) {
+    const OtaImagePolicy policy = {
+        .manufacturer = 0x1234u, .image_type = 0x1234u,
+        .hardware_version = 1u, .current_version = 1u,
+        .slot_size = 2000u
+    };
+    const OtaImageOffer offer = {
+        .manufacturer = 0x1234u, .image_type = 0x1234u,
+        .version = 2u, .file_size = 266u
+    };
+    memset(file, 0, 266u);
+    streamFileW32(file, 0x0BEEF11Eu);
+    streamFileW16(file + 4u, 0x0100u);
+    streamFileW16(file + 6u, 60u);
+    streamFileW16(file + 8u, 4u);
+    streamFileW16(file + 10u, offer.manufacturer);
+    streamFileW16(file + 12u, offer.image_type);
+    streamFileW32(file + 14u, offer.version);
+    streamFileW16(file + 18u, 2u);
+    streamFileW32(file + 52u, offer.file_size);
+    streamFileW16(file + 56u, 1u);
+    streamFileW16(file + 58u, 1u);
+    streamFileW16(file + 60u, 0u);
+    streamFileW32(file + 62u, 200u);
+    file[66] = 0xE9u;
+    for (unsigned i = 67u; i < 266u; ++i)
+        file[i] = (uint8_t)(i % 251u);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Start(
+        stream, &policy, &offer, &writerStreamOps, &writer));
+}
+void test_WriterStream_LateDuplicateAfterFlashWriteCannotSelectBoot(void) {
+    OtaImageStream stream = {0};
+    uint8_t file[266];
+    setupLongWriterStream(&stream, file);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Consume(&stream, 0u, file, 67u));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Consume(&stream, 67u, file + 67u, 50u));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Consume(&stream, 117u, file + 117u, 50u));
+    TEST_ASSERT_EQUAL(3, writeCalls);
+    TEST_ASSERT_EQUAL_UINT32(167u, stream.next_offset);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        OtaImageStream_Consume(&stream, 117u, file + 117u, 50u));
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_TRUE(stream.cleanup_attempted);
+    TEST_ASSERT_FALSE(stream.cleanup_uncertain);
+    TEST_ASSERT_EQUAL(1, abortCalls);
+    TEST_ASSERT_EQUAL(3, writeCalls);
+    TEST_ASSERT_EQUAL(0, endCalls);
+    TEST_ASSERT_EQUAL(0, selectCalls);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageStream_Check(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageStream_Apply(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
+        OtaImageStream_Consume(&stream, 167u, file + 167u, 50u));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Cancel(&stream));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+}
+void test_WriterStream_SkippedBlockAfterFlashWriteCannotSelectBoot(void) {
+    OtaImageStream stream = {0};
+    uint8_t file[266];
+    setupLongWriterStream(&stream, file);
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Consume(&stream, 0u, file, 67u));
+    TEST_ASSERT_EQUAL(ESP_OK, OtaImageStream_Consume(&stream, 67u, file + 67u, 50u));
+    /* SDK advanced FileOffset past the expected 117-byte boundary. */
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        OtaImageStream_Consume(&stream, 167u, file + 167u, 50u));
+    TEST_ASSERT_TRUE(stream.failed);
+    TEST_ASSERT_EQUAL_UINT32(117u, stream.next_offset);
+    TEST_ASSERT_TRUE(stream.cleanup_attempted);
+    TEST_ASSERT_FALSE(stream.cleanup_uncertain);
+    TEST_ASSERT_EQUAL(2, writeCalls);
+    TEST_ASSERT_EQUAL(1, abortCalls);
+    TEST_ASSERT_EQUAL(0, endCalls);
+    TEST_ASSERT_EQUAL(0, selectCalls);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageStream_Check(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageStream_Apply(&stream));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
+        OtaImageStream_Consume(&stream, 117u, file + 117u, 50u));
+    TEST_ASSERT_EQUAL(1, abortCalls);
+}
 void test_WriterStream_AbortFailureNeverRetriesLostHandle(void) {
     OtaImageStream stream = {0};
     uint8_t file[69];
@@ -528,6 +610,8 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_WriterStream_AbortFailureNeverRetriesLostHandle);
     RUN_TEST(test_WriterStream_BeginFailureCannotBeCanceledIntoFalseRecovery);
     RUN_TEST(test_WriterStream_MissingHandleAtVerifyBlocksNewTransfer);
+    RUN_TEST(test_WriterStream_LateDuplicateAfterFlashWriteCannotSelectBoot);
+    RUN_TEST(test_WriterStream_SkippedBlockAfterFlashWriteCannotSelectBoot);
 }
 #ifndef RACOOL_TARGET_TESTING
 int main(void) {
