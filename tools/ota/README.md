@@ -134,3 +134,10 @@ Even unchanged readback does not clear a partial-write uncertainty. The
 owner/operator must investigate the physical boot state before recovery.
 This is a source-level and mocked-SDK guard; it is not physical power-loss
 proof.
+
+The same boot-partition readback is a **pre-erase admission** check:
+`Begin` refuses the inactive slot when it is already configured for next
+boot, even though it is not the running partition. A missing boot readback
+also prevents flash mutation. If that choice changes/becomes unreadable
+between Begin and SelectBoot, selection and cleanup are latched as uncertain
+without attempting another otadata write.

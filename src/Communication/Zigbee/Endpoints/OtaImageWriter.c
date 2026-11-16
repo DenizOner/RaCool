@@ -40,8 +40,12 @@ esp_err_t OtaImageWriter_Begin(OtaImageWriter *writer, uint32_t app_size) {
 
     const esp_partition_t *target = esp_ota_get_next_update_partition(NULL);
     const esp_partition_t *running = esp_ota_get_running_partition();
-    if (!target || !running || target == running ||
-        app_size > target->size) return ESP_ERR_INVALID_STATE;
+    const esp_partition_t *scheduled = esp_ota_get_boot_partition();
+    /* A selected but not-yet-running image may share the next update slot.
+     * Never erase it, or begin an update when the boot choice is unreadable. */
+    if (!target || !running || !scheduled || target == running ||
+        target == scheduled || app_size > target->size)
+        return ESP_ERR_INVALID_STATE;
 
     esp_ota_handle_t handle = 0;
     /* Exact size bounds erase work. This may take time; never call from an
@@ -122,7 +126,13 @@ esp_err_t OtaImageWriter_SelectBoot(OtaImageWriter *writer) {
      * value alone does not prove that the intended slot was selected.
      */
     const esp_partition_t *before = esp_ota_get_boot_partition();
-    if (!before || before == writer->partition) return ESP_ERR_INVALID_STATE;
+    if (!before || before == writer->partition) {
+        /* The boot choice changed or became unreadable since Begin. Even
+         * without a new SDK write, a later reboot may select our target. */
+        writer->failed = true;
+        writer->boot_selection_uncertain = true;
+        return ESP_ERR_INVALID_STATE;
+    }
     esp_err_t result = esp_ota_set_boot_partition(
         (const esp_partition_t *)writer->partition);
     const esp_partition_t *after = esp_ota_get_boot_partition();

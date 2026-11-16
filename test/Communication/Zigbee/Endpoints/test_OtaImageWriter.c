@@ -186,17 +186,32 @@ void test_Writer_SuccessfulSdkReturnWithoutMatchingReadbackFailsClosed(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
     TEST_ASSERT_EQUAL(1, selectCalls);
 }
-void test_Writer_BootReadbackMissingOrAlreadySelectedSkipsMutation(void) {
+void test_Writer_BeginCannotErasePreviouslySelectedBootSlot(void) {
+    bootPartition = &inactive;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(0, beginCalls);
+    bootPartition = &running;
+    haveBootReadback = false;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Begin(&writer, 4u));
+    TEST_ASSERT_EQUAL(0, beginCalls);
+}
+void test_Writer_MissingBootReadbackAtSelectLocksOwner(void) {
     writeAndVerify();
     haveBootReadback = false;
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_TRUE(writer.boot_selection_uncertain);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
     TEST_ASSERT_EQUAL(0, selectCalls);
-    haveBootReadback = true;
+    TEST_ASSERT_EQUAL(0, abortCalls);
+}
+void test_Writer_BootChoiceChangedBeforeSelectLocksOwner(void) {
+    writeAndVerify();
     bootPartition = &inactive;
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_TRUE(writer.boot_selection_uncertain);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_SelectBoot(&writer));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, OtaImageWriter_Abort(&writer));
     TEST_ASSERT_EQUAL(0, selectCalls);
-    bootPartition = &running;
-    TEST_ASSERT_EQUAL(ESP_OK, OtaImageWriter_Abort(&writer));
     TEST_ASSERT_EQUAL(0, abortCalls);
 }
 void test_Writer_AbortFailureRetainsOwnedHandleForRetry(void) {
@@ -240,7 +255,9 @@ void test_OtaImageWriter_All(void) {
     RUN_TEST(test_Writer_FailedBootSelectionWithChangedReadbackLocksOwner);
     RUN_TEST(test_Writer_FailedBootSelectionEvenIfOldReadbackLocksOwner);
     RUN_TEST(test_Writer_SuccessfulSdkReturnWithoutMatchingReadbackFailsClosed);
-    RUN_TEST(test_Writer_BootReadbackMissingOrAlreadySelectedSkipsMutation);
+    RUN_TEST(test_Writer_BeginCannotErasePreviouslySelectedBootSlot);
+    RUN_TEST(test_Writer_MissingBootReadbackAtSelectLocksOwner);
+    RUN_TEST(test_Writer_BootChoiceChangedBeforeSelectLocksOwner);
     RUN_TEST(test_Writer_AbortFailureRetainsOwnedHandleForRetry);
     RUN_TEST(test_Writer_NullInputOrEmptyWriteCannotMutate);
 }
