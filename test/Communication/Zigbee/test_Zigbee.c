@@ -575,6 +575,35 @@ void test_Zigbee_AttributeNotificationRequiresSdkLock(void) {
     TEST_ASSERT_EQUAL(ZIGBEE_ERROR_INVALID_PARAM, zb->NotifyAttributeChanged(zb, 1, 0x0204, 0x8030, NULL, 2));
 }
 
+void test_Zigbee_BootHealthRequiresLiveSdkMainloopNotNetworkJoin(void) {
+    IZigbee *radio = Zigbee_Create();
+    IService foreign = {0};
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(NULL));
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&foreign));
+    TEST_ASSERT_EQUAL(0, radio->base.Initialize(&radio->base, NULL));
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+    TEST_ASSERT_EQUAL(0, radio->base.Start(&radio->base));
+    TEST_ASSERT_EQUAL(SERVICE_STATE_STARTED, radio->base.GetState(&radio->base));
+    /* The Start mock publishes STARTED without entering the real SDK loop. */
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+    atomic_store(&zigbeeService.mainloopRunning, true);
+    TEST_ASSERT_FALSE(GetConnected());
+    TEST_ASSERT_TRUE(Zigbee_IsBootReady(&radio->base));
+    atomic_store(&zigbeeService.mainloopExited, true);
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+    atomic_store(&zigbeeService.mainloopExited, false);
+    atomic_store(&zigbeeService.closing, true);
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+    atomic_store(&zigbeeService.closing, false);
+    atomic_store(&zigbeeService.workerExited, true);
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+    atomic_store(&zigbeeService.workerExited, false);
+    atomic_store(&zigbeeService.mainloopRunning, false);
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+    atomic_store(&zigbeeService.mainloopRunning, true);
+    atomic_store(&zigbeeService.startupResult, ESP_FAIL);
+    TEST_ASSERT_FALSE(Zigbee_IsBootReady(&radio->base));
+}
 void test_Zigbee_ReportingDoesNotUseFullFreeRTOSTimerQueue(void) {
     IZigbee *zb=Zigbee_Create(); TEST_ASSERT_EQUAL(0,zb->base.Initialize(&zb->base,NULL));
     zigbeeService.currentState=SERVICE_STATE_STARTED;

@@ -6,6 +6,7 @@
 
 #include "Core/ServiceLocator/ServiceLocator.h"
 #include "Core/ServiceLocator/ServiceNames.h"
+#include "Communication/Zigbee/ZigbeeBootHealth.h"
 #include "Management/ConfigurationManager/IConfigurationManager.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -36,8 +37,11 @@ static bool OtaBootRecovery_IsHealthy(void) {
         if (!service || !service->GetState ||
             service->GetState(service) != SERVICE_STATE_STARTED)
             return false;
-        /* Read watchdog health, not Zigbee RF association or a single MLX
-         * sample; those can be temporarily unavailable on a sound boot. */
+        /* The Zigbee SDK mainloop can exit while IService still says STARTED.
+         * Its owner provides a read-only, RF-association-independent gate. */
+        if (i == 4u && !Zigbee_IsBootReady(service))
+            return false;
+        /* The watchdog health check does not cover Zigbee's SDK worker. */
         if (i == sizeof(required) / sizeof(required[0]) - 1u &&
             (!service->CheckHealth || service->CheckHealth(service) != 0))
             return false;

@@ -14,7 +14,8 @@ static esp_ota_img_states_t imageState;
 static unsigned stateReads, confirmCalls, rollbackCalls, getSnapshotCalls;
 static IService services[6];
 static ServiceState serviceStates[6];
-static bool watchdogHealthy;
+static bool watchdogHealthy, zigbeeBootReady;
+static unsigned zigbeeBootChecks;
 static IConfigurationManager configuration;
 static const char *const serviceNames[] = {
     SVC_NAME_CONFIGURATION_MANAGER, SVC_NAME_RELAY,
@@ -45,6 +46,11 @@ static ServiceState currentState(IService *service) {
     TEST_ASSERT_TRUE(index >= 0 && index < 6);
     return serviceStates[index];
 }
+bool Zigbee_IsBootReady(const IService *service) {
+    TEST_ASSERT_EQUAL_PTR(&services[4], service);
+    zigbeeBootChecks++;
+    return zigbeeBootReady;
+}
 static int32_t checkWatchdog(IService *service) {
     TEST_ASSERT_EQUAL_PTR(&services[5], service);
     return watchdogHealthy ? 0 : -1;
@@ -62,6 +68,8 @@ static esp_err_t getSnapshot(IConfigurationManager *self, SystemSettings *out) {
 }
 void setUp(void) {
     havePartition = rollbackPossible = snapshotReadable = watchdogHealthy = true;
+    zigbeeBootReady = true;
+    zigbeeBootChecks = 0;
     imageState = ESP_OTA_IMG_PENDING_VERIFY;
     readStateResult = confirmResult = rollbackResult = ESP_OK;
     stateReads = confirmCalls = rollbackCalls = getSnapshotCalls = 0;
@@ -113,6 +121,39 @@ void test_OtaBoot_BadSettingsRollsBackOnlyWhenFallbackExists(void) {
     OtaBootRecovery_CompleteFirstBoot(true);
     TEST_ASSERT_EQUAL(0, rollbackCalls);
 }
+static void loseZigbeeMainloopAfterFirstSample(TickType_t delay) {
+    (void)delay;
+    zigbeeBootReady = false;
+}
+void test_OtaBoot_StartedZigbeeWithoutSdkMainloopBlocksConfirmation(void) {
+    /* The IService state and watchdog both look healthy. Only the SDK owner
+     * knows that Zigbee's mainloop has exited or is closing. */
+    serviceStates[4] = SERVICE_STATE_STARTED;
+    watchdogHealthy = true;
+    zigbeeBootReady = false;
+    OtaBootRecovery_CompleteFirstBoot(true);
+    TEST_ASSERT_EQUAL(0, confirmCalls);
+    TEST_ASSERT_EQUAL(1, rollbackCalls);
+    TEST_ASSERT_EQUAL(0, getSnapshotCalls);
+    TEST_ASSERT_EQUAL(6, zigbeeBootChecks);
+}
+void test_OtaBoot_ZigbeeMainloopExitBetweenHealthySamplesPreventsConfirmation(void) {
+    mocked_vTaskDelay_fake.custom_fake = loseZigbeeMainloopAfterFirstSample;
+    OtaBootRecovery_CompleteFirstBoot(true);
+    TEST_ASSERT_EQUAL(0, confirmCalls);
+    TEST_ASSERT_EQUAL(1, rollbackCalls);
+    TEST_ASSERT_EQUAL(1, getSnapshotCalls);
+    TEST_ASSERT_EQUAL(6, zigbeeBootChecks);
+    TEST_ASSERT_EQUAL(5, mocked_vTaskDelay_fake.call_count);
+}
+void test_OtaBoot_ZigbeeMainloopMissingWithoutFallbackStaysUnconfirmed(void) {
+    zigbeeBootReady = false;
+    rollbackPossible = false;
+    OtaBootRecovery_CompleteFirstBoot(true);
+    TEST_ASSERT_EQUAL(0, confirmCalls);
+    TEST_ASSERT_EQUAL(0, rollbackCalls);
+    TEST_ASSERT_EQUAL(6, zigbeeBootChecks);
+}
 void test_OtaBoot_WatchdogFailureBlocksConfirmation(void) {
     watchdogHealthy = false;
     OtaBootRecovery_CompleteFirstBoot(true);
@@ -152,6 +193,9 @@ void test_OtaBootRecovery_All(void) {
     RUN_TEST(test_OtaBoot_InvalidStateReadNeverMutatesBoot);
     RUN_TEST(test_OtaBoot_BadSettingsRollsBackOnlyWhenFallbackExists);
     RUN_TEST(test_OtaBoot_WatchdogFailureBlocksConfirmation);
+    RUN_TEST(test_OtaBoot_StartedZigbeeWithoutSdkMainloopBlocksConfirmation);
+    RUN_TEST(test_OtaBoot_ZigbeeMainloopExitBetweenHealthySamplesPreventsConfirmation);
+    RUN_TEST(test_OtaBoot_ZigbeeMainloopMissingWithoutFallbackStaysUnconfirmed);
     RUN_TEST(test_OtaBoot_TransientSensorSampleDoesNotGateServices);
     RUN_TEST(test_OtaBoot_UnstartedRelayNeverConfirms);
     RUN_TEST(test_OtaBoot_FailedStartupRequestsRollbackNotConfirmation);

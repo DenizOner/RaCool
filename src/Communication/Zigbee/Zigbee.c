@@ -1,5 +1,6 @@
 #if !defined(RACOOL_TARGET_TESTING) || defined(RACOOL_INTERNAL_TEST_ACCESS)
 #include "Communication/Zigbee/IZigbee.h"
+#include "Communication/Zigbee/ZigbeeBootHealth.h"
 #include "Communication/Zigbee/Endpoints/FanSourceAttributes.h"
 #include "Communication/Zigbee/ZigbeeConfig.h"
 #include "Communication/Zigbee/ZigbeeConsoleCommands.h"
@@ -132,6 +133,8 @@ typedef struct {
   atomic_bool startupComplete;
   atomic_int startupResult;
   atomic_bool mainloopExited;
+  /* Set only while the SDK mainloop call is outstanding, independently of RF join. */
+  atomic_bool mainloopRunning;
   /* Protected by lifecycleMutex; callback results are published atomically. */
   bool stopPosted;
   atomic_bool stopCallbackComplete;
@@ -880,7 +883,9 @@ startup_done:
     atomic_store(&zigbeeService.startupComplete, true);
     if (err == ESP_OK && !atomic_load(&zigbeeService.closing)) {
       ESP_LOGI(TAG, "Starting Zigbee stack mainloop...");
+      atomic_store(&zigbeeService.mainloopRunning, true);
       err = esp_zigbee_launch_mainloop();
+      atomic_store(&zigbeeService.mainloopRunning, false);
       if (err != ESP_OK) ESP_LOGE(TAG, "SDK mainloop failed: %s", esp_err_to_name(err));
     }
     atomic_store(&zigbeeService.closing, true);
@@ -928,6 +933,7 @@ static int32_t Zigbee_StartOwned(IService *self) {
     atomic_store(&zigbeeService.startupComplete, false);
     atomic_store(&zigbeeService.startupResult, ESP_ERR_INVALID_STATE);
     atomic_store(&zigbeeService.mainloopExited, false);
+    atomic_store(&zigbeeService.mainloopRunning, false);
     zigbeeService.stopPosted = false;
     atomic_store(&zigbeeService.stopCallbackComplete, false);
     atomic_store(&zigbeeService.stopCallbackResult, ESP_ERR_NOT_FINISHED);
@@ -1118,6 +1124,20 @@ static int32_t Zigbee_Stop(IService *self) {
 }
 
 static ServiceState Zigbee_GetState(IService *self) { return zigbeeService.currentState; }
+
+/* Boot confirmation must observe the SDK owner, not just STARTED, and must
+ * not use ordinary CheckHealth: that also requires network association. */
+bool Zigbee_IsBootReady(const IService *service) {
+  return service == &zigbeeService.base.base &&
+      atomic_load(&zigbeeService.currentState) == SERVICE_STATE_STARTED &&
+      atomic_load(&zigbeeService.startupComplete) &&
+      atomic_load(&zigbeeService.startupResult) == ESP_OK &&
+      atomic_load(&zigbeeService.workerTask) != NULL &&
+      atomic_load(&zigbeeService.mainloopRunning) &&
+      !atomic_load(&zigbeeService.mainloopExited) &&
+      !atomic_load(&zigbeeService.workerExited) &&
+      !atomic_load(&zigbeeService.closing);
+}
 
 static int32_t Zigbee_CheckHealth(IService *self) {
   return (zigbeeService.currentState == SERVICE_STATE_STARTED && GetConnected() &&
