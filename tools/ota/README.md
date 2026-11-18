@@ -59,27 +59,71 @@ The ZCL outer header and `OtaImagePolicy` are an admission filter, not a
 cryptographic signature verification. Signed OTA is still disabled in the
 existing production image and the EP10 callback still fails closed.
 
-## OTA manufacturer identity — release blocker
+## DIY/local OTA identity (no assigned manufacturer code)
 
-`include/Communication/Zigbee/ZigbeeConfig.h` currently uses
-`ZIGBEE_OTA_MANUFACTURER_CODE 0x1234` and
-`ZIGBEE_OTA_IMAGE_TYPE 0x1234`. These values are existing provisional
-OTA protocol identifiers, **not evidence of a RaCool manufacturer-code
-allocation**. A pinned Wireshark Zigbee manufacturer table identifies
-`0x1234` as **DSR Corporation**:
-[packet-zbee.h, lines 906 and 1495](https://github.com/wireshark/wireshark/blob/82b1cb5927cd3b3562bae5345ed5040422518421/epan/dissectors/packet-zbee.h#L906).
-The formal ownership/assignment for RaCool has **not** been established.
+**Product Owner decision, 18 November 2026:** RaCool is a personal DIY
+device. A paid Zigbee/CSA manufacturer-code assignment, certification or
+vendor-hosted OTA service is **not** required for this project's local
+Zigbee2MQTT workflow. Do not claim an assigned/manufacturer-certified ID or
+distribute public OTA images under another company's ID.
 
-Do not label a RaCool production OTA image as an authorized manufacturer
-image under `0x1234`, or change the existing OTA identity merely to make
-a test pass. Before enabling a release, the Product Owner must confirm
-a legitimate manufacturer-code identity and approve a migration/compatibility
-policy for deployed Zigbee clients, OTA image metadata, server/converter
-catalog, versions and test consumers. Image type is interpreted in the
-context of its manufacturer code; it is not proof of manufacturer ownership.
-Do not erase Zigbee storage, silently re-pair devices, or change radio/HA
-identity as a workaround. This finding does **not** modify the current
-fail-closed EP10, signing gate or production configuration.
+The EP10 OTA client now advertises the **shared, non-unique test-vendor code
+`0xFFF1`** (`ZIGBEE_OTA_MANUFACTURER_CODE`) together with RaCool's
+project-local **image-type token `0x1234`** (`ZIGBEE_OTA_IMAGE_TYPE`),
+hardware version 1 and the existing monotonic `RACOOL_OTA_FILE_VERSION`.
+`0xFFF1` is a shared testing namespace, **not a RaCool allocation**;
+image type `0x1234` does not mean that RaCool owns manufacturer code
+`0x1234`. `0xFFFF` is a Zigbee wildcard, not a safe device identity.
+The old OTA manufacturer code `0x1234` is also listed for DSR Corporation
+in [Wireshark's Zigbee manufacturer table](https://github.com/wireshark/wireshark/blob/82b1cb5927cd3b3562bae5345ed5040422518421/epan/dissectors/packet-zbee.h#L906).
+Test IDs may be shared by other projects; **neither a local index nor
+numeric identity is a security/trust boundary**. The RSA-v2 signed ESP
+application check remains mandatory.
+
+**Local-only distribution contract for future Issue #28 and #29:**
+
+1. Keep the existing Basic `manufacturerName="RaCool"`,
+   `modelId="RaCool-ESP32C6"`, endpoints, HA converter, Zigbee network
+   identity and NVS unchanged. The new `0xFFF1` identifies the OTA client
+   image family only, not network ownership or radio pairing.
+2. Build the signed application with the separately approved, locally held
+   RSA-3072 private key. Verify the signature and exact application/OTA
+   container header, model, hardware range, image size, increasing file
+   version and SHA-512 before it can appear in any index. No private key
+   or network secret enters CI, GitHub Releases, logs or a device HTTP path.
+3. Generate a **Zigbee2MQTT-local, user-maintained OTA index** and firmware
+   file within the Zigbee2MQTT host/container-visible data directory.
+   Entries must precisely match `manufacturerCode=65521` (`0xFFF1`),
+   `imageType=4660` (`0x1234`), the signed container's actual file
+   version/hash/size, and restrict targeting to `modelId="RaCool-ESP32C6"`
+   and `manufacturerName=["RaCool"]`. Do not publish this shared test
+   namespace to a public OTA feed or set any global index without separate
+   device-safe validation.
+4. Only after an authorized signed-base installation and actual device
+   verification, configure the local index using Zigbee2MQTT's supported
+   `ota.zigbee_ota_override_index_location` option (e.g.
+   `racool-ota-index.json`) or provide an explicitly selected local file
+   in an OTA update request. Start upgrades manually **one RaCool device at
+   a time**, not on discovery or a timer. Preserve the default network and
+   configured HA entities. The ESP32-C6 itself never uses Wi-Fi/HTTP/GitHub.
+5. **Legacy unsigned clients:** The existing device image advertises
+   manufacturer code `0x1234`; changing a source constant does not update
+   installed firmware, and a `0xFFF1` OTA image cannot be assumed to reach
+   that client. First trusted signed firmware installation/migration is a
+   separate physical-data-risk step requiring explicit Product Owner approval
+   and proof of backup, rollback, NVS/Zigbee continuity and boot. Do not
+   silently alias the DSR code, reset pairing, erase partitions, change
+   network identity or falsely mark the signed base as installed.
+6. Current production image is unsigned, and the SDK callback/flash ACK
+   contract is unresolved; EP10 still returns `ABORT` for
+   START/RECEIVING/CHECK/APPLY/FINISH. Thus this configuration is **not**
+   a working OTA delivery claim. Keep physical OTA/reboot/fan/WDT/RF
+   acceptance BLOCKED/NOT TESTED until verified.
+
+This is a **DIY local OTA workflow**, not a claim of Zigbee certification.
+Public GitHub source code and ordinary CI artifacts may remain available,
+but **public OTA image/index publishing is not the delivery goal**. No
+subscription, certification fee or manufacturer-code purchase is required.
 
 Sources (pinned version):
 - ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
