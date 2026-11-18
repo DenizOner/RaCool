@@ -4,7 +4,7 @@
 #include "Communication/Zigbee/Endpoints/OtaImagePolicy.c"
 
 static const OtaImagePolicy policy = {
-    .manufacturer = 0x1234u, .image_type = 0x1234u,
+    .manufacturer = 0xFFF1u, .image_type = 0x1234u,
     .hardware_version = 1u, .current_version = 0x01020000u,
     .slot_size = 0x300000u
 };
@@ -51,6 +51,13 @@ void test_OtaImagePolicy_RejectDifferentManufacturerAndImageType(void) {
     offer.image_type++;
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, &offer));
 }
+void test_OtaImagePolicy_RejectLegacyAndWildcardManufacturer(void) {
+    offer.manufacturer = 0x1234u; /* Historically used, belongs to another vendor. */
+    TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, &offer));
+    offer.manufacturer = 0xFFFFu; /* Zigbee wildcard is not a private device ID. */
+    TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, &offer));
+}
+
 void test_OtaImagePolicy_RejectEqualOlderAndOversizedImage(void) {
     offer.version = policy.current_version;
     TEST_ASSERT_FALSE(OtaImagePolicy_AcceptOffer(&policy, &offer));
@@ -130,6 +137,7 @@ void test_OtaImagePolicy_NullAndExtremeInputsAreSafe(void) {
 void test_OtaImagePolicy_All(void) {
     RUN_TEST(test_OtaImagePolicy_ValidCandidateAndAppPrefix);
     RUN_TEST(test_OtaImagePolicy_RejectDifferentManufacturerAndImageType);
+    RUN_TEST(test_OtaImagePolicy_RejectLegacyAndWildcardManufacturer);
     RUN_TEST(test_OtaImagePolicy_RejectEqualOlderAndOversizedImage);
     RUN_TEST(test_OtaImagePolicy_RejectTruncatedOrInvalidEnvelope);
     RUN_TEST(test_OtaImagePolicy_RejectUnsafeFlagsAndHardwareRange);
