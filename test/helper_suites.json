@@ -4,6 +4,10 @@
     "runner": "node"
   },
   {
+    "file": "test/Communication/Zigbee/test_bridge_log_recovery.mjs",
+    "runner": "node"
+  },
+  {
     "file": "test/Communication/Zigbee/test_reporting_interval_wire.mjs",
     "runner": "node"
   },

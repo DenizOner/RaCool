@@ -8,3 +8,5 @@ Modül testleri `src/` ağacını izler: örneğin `src/Hardware/BuiltinLED/` i�
 - Kök çalıştırıcılar ve kayıt dosyaları ortak giriş sözleşmesidir. `build/` ve Python önbellekleri üretilmiş, yok sayılan çıktılardır.
 
 `node test/check_test_layout.mjs` modül klasörlerinin kaynak karşılığını kontrol eder. `node test/check_test_inventory.mjs` paket/kasa kayıtlarını ayrı doğrular. İki kontrol de başarılı olmadan düzenleme tamamlanmış sayılmaz.
+
+Zigbee'nin donanım gerektirmeyen MQTT kurtarma testleri iki ayrı helper paketinde tutulur: `test/Communication/Zigbee/test_live_recovery.mjs` erişim izni ve altı ZCL rapor aralığı için 26 vakayı, `test/Communication/Zigbee/test_bridge_log_recovery.mjs` ortak bridge log düzeyinin güvenli geri yüklenmesi için 20 vakayı yürütür. `helper_suites.json` dosyası bu 46 vakayı iki bağımsız süreçte, mevcut dosya başına zaman aşımı ve başarısızlık kuralları değiştirilmeden kaydeder. Sahte TCP/MQTT testlerinin geçmesi canlı Zigbee RF veya cihaz kabulü değildir.
