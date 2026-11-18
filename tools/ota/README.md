@@ -59,6 +59,28 @@ The ZCL outer header and `OtaImagePolicy` are an admission filter, not a
 cryptographic signature verification. Signed OTA is still disabled in the
 existing production image and the EP10 callback still fails closed.
 
+## OTA manufacturer identity — release blocker
+
+`include/Communication/Zigbee/ZigbeeConfig.h` currently uses
+`ZIGBEE_OTA_MANUFACTURER_CODE 0x1234` and
+`ZIGBEE_OTA_IMAGE_TYPE 0x1234`. These values are existing provisional
+OTA protocol identifiers, **not evidence of a RaCool manufacturer-code
+allocation**. A pinned Wireshark Zigbee manufacturer table identifies
+`0x1234` as **DSR Corporation**:
+[packet-zbee.h, lines 906 and 1495](https://github.com/wireshark/wireshark/blob/82b1cb5927cd3b3562bae5345ed5040422518421/epan/dissectors/packet-zbee.h#L906).
+The formal ownership/assignment for RaCool has **not** been established.
+
+Do not label a RaCool production OTA image as an authorized manufacturer
+image under `0x1234`, or change the existing OTA identity merely to make
+a test pass. Before enabling a release, the Product Owner must confirm
+a legitimate manufacturer-code identity and approve a migration/compatibility
+policy for deployed Zigbee clients, OTA image metadata, server/converter
+catalog, versions and test consumers. Image type is interpreted in the
+context of its manufacturer code; it is not proof of manufacturer ownership.
+Do not erase Zigbee storage, silently re-pair devices, or change radio/HA
+identity as a workaround. This finding does **not** modify the current
+fail-closed EP10, signing gate or production configuration.
+
 Sources (pinned version):
 - ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
 - ESP-IDF v5.3.1 Secure Boot V2 / Signed App Verification Without Hardware
