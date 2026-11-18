@@ -62,6 +62,12 @@ void setUp_EndpointOTA(void) {
 
 void tearDown_EndpointOTA(void) {}
 
+void test_EndpointOTA_LocalHobbyIdentityIsExplicitlyTestOnly(void) {
+    /* Shared test-vendor namespace, never a claimed RaCool CSA allocation. */
+    TEST_ASSERT_EQUAL_HEX16(0xFFF1u, ZIGBEE_OTA_MANUFACTURER_CODE);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, ZIGBEE_OTA_IMAGE_TYPE);
+}
+
 void test_EndpointOTA_Identification(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
     TEST_ASSERT_EQUAL_STRING("OTAUpgradeEndpoint", ep->GetName(ep));
@@ -138,6 +144,29 @@ void test_EndpointOTA_RejectsOldAndForeignOffersBeforeFlash(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
     TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
     TEST_ASSERT_EQUAL(2, otaErrorEvents);
+}
+
+void test_EndpointOTA_RejectsLegacyAndWildcardManufacturerWithoutFlash(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+               .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                         .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                         .file_version = ZIGBEE_FIRMWARE_VERSION + 1u,
+                         .image_size = 1000u}}
+    };
+    const uint16_t rejected[] = {0x1234u, 0xFFFFu};
+    for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
+        msg.in.start.manuf_code = rejected[i];
+        msg.out.result = EZB_ZCL_STATUS_SUCCESS;
+        esp_err_t status = ESP_OK;
+        TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID,
+                                          &msg, &status));
+        TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+        TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+        TEST_ASSERT_EQUAL(i + 1u, otaErrorEvents);
+        TEST_ASSERT_EQUAL(0, otaCompleteEvents);
+    }
 }
 
 void test_EndpointOTA_SeparateAttemptsReportErrors(void) {
@@ -259,11 +288,13 @@ void test_EndpointOTA_All(void) {
     RUN_TEST(test_EndpointOTA_ProfileValidationAndErrors);
     RUN_TEST(test_EndpointOTA_RegistrationFailurePreservesOwnership);
     RUN_TEST(test_EndpointOTA_Identification);
+    RUN_TEST(test_EndpointOTA_LocalHobbyIdentityIsExplicitlyTestOnly);
     RUN_TEST(test_EndpointOTA_RegisterClusters);
     RUN_TEST(test_EndpointOTA_HandleAction_Progress);
     RUN_TEST(test_EndpointOTA_AbortAndUnknownProgress);
     RUN_TEST(test_EndpointOTA_SeparateAttemptsReportErrors);
     RUN_TEST(test_EndpointOTA_RejectsOldAndForeignOffersBeforeFlash);
+    RUN_TEST(test_EndpointOTA_RejectsLegacyAndWildcardManufacturerWithoutFlash);
 }
 
 #ifndef RACOOL_TARGET_TESTING
