@@ -1,6 +1,7 @@
 #include "Core/ServiceLocator/ServiceLocator.h"
 #include "Core/SystemInitializer/ISystemInitializer.h"
 #include "Controllers/UIController/BootAnimation.h"
+#include "Core/SystemInitializer/OtaBootRecovery.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -8,6 +9,7 @@
 #include <esp_rom_sys.h>
 #include <esp_timer.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 #ifndef RACOOL_TARGET_TESTING
@@ -15,6 +17,7 @@ static const char *TAG = "Main";
 
 static void app_startup_task(void *pvParameters) {
   uint64_t start_time = esp_timer_get_time();
+  bool startupSucceeded = false;
   ESP_LOGI(TAG, "app_main: RaCool application starting");
 
   SystemInitializer *initializer = GetSystemInitializer();
@@ -30,6 +33,7 @@ static void app_startup_task(void *pvParameters) {
         ESP_LOGI(TAG, "Boot complete, duration=%lld ms", duration_ms);
           BootAnimation_NotifyReady();
         ESP_LOGI("Main", "app_main: System ready.");
+        startupSucceeded = true;
       } else {
         ESP_LOGE(TAG, "Service startup failed; system is not ready.");
       }
@@ -39,6 +43,7 @@ static void app_startup_task(void *pvParameters) {
   } else {
     ESP_LOGE(TAG, "Failed to get SystemInitializer!");
   }
+  OtaBootRecovery_CompleteFirstBoot(startupSucceeded);
   vTaskDelete(NULL);
 }
 

@@ -22,6 +22,14 @@ static int32_t request_shutdown(ISystemController *self, uint32_t delay) {
 static unsigned profile_writes;
 static PowerMode_t requested_mode;
 static int32_t profile_result;
+static IEventBus otaEventBus;
+static unsigned otaErrorEvents;
+static unsigned otaCompleteEvents;
+static int32_t recordOtaEvent(BusEvent event) {
+    if (event.eventName && !strcmp(event.eventName, "ota_error")) otaErrorEvents++;
+    if (event.eventName && !strcmp(event.eventName, "ota_complete")) otaCompleteEvents++;
+    return 0;
+}
 static esp_err_t snapshot(IConfigurationManager *self, SystemSettings *out) {
     (void)self; memset(out, 0, sizeof(*out)); out->system.power_profile = 1; return ESP_OK;
 }
@@ -47,9 +55,18 @@ void setUp_EndpointOTA(void) {
     mocked_ezb_zcl_ota_upgrade_create_cluster_desc_fake.return_val = (void *)0x200;
     ezb_zcl_thermostat_ui_config_create_cluster_desc_fake.return_val = (void *)0x300;
     profile_writes = freed_endpoints = freed_clusters = 0; profile_result = POWER_OK;
+    otaEventBus = (IEventBus){.Publish = recordOtaEvent};
+    otaErrorEvents = otaCompleteEvents = 0;
+    mocked_ServiceLocator_GetEventBus_fake.return_val = &otaEventBus;
 }
 
 void tearDown_EndpointOTA(void) {}
+
+void test_EndpointOTA_LocalHobbyIdentityIsExplicitlyTestOnly(void) {
+    /* Shared test-vendor namespace, never a claimed RaCool CSA allocation. */
+    TEST_ASSERT_EQUAL_HEX16(0xFFF1u, ZIGBEE_OTA_MANUFACTURER_CODE);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, ZIGBEE_OTA_IMAGE_TYPE);
+}
 
 void test_EndpointOTA_Identification(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
@@ -75,19 +92,130 @@ void test_EndpointOTA_RegisterClusters(void) {
 
 void test_EndpointOTA_HandleAction_Progress(void) {
     IZigbeeEndpoint *ep = EndpointOTA_Create();
-    esp_err_t status = ESP_FAIL;
-    
-    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
-        .in = {
-            .progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
-            .start = { .image_size = 500000 }
-        }
+    ezb_zcl_ota_upgrade_client_progress_message_t messages[] = {
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+                 .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                           .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                           .file_version = ZIGBEE_FIRMWARE_VERSION + 1u,
+                           .image_size = 1000u}}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_RECEIVING}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY}},
+        {.in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_FINISH}},
     };
-    
-    bool handled = ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status);
-    
-    TEST_ASSERT_TRUE(handled);
+
+    /* No flash writer is registered: all transfer phases must fail closed,
+     * even if progress is received out of order or the counters are stale. */
+    for (size_t i = 0; i < sizeof(messages) / sizeof(messages[0]); ++i) {
+        esp_err_t status = ESP_OK;
+        otaInstance.state = OTA_STATE_DOWNLOADING;
+        otaInstance.bytesReceived = UINT32_MAX;
+        otaInstance.totalSize = 500000;
+        messages[i].out.result = EZB_ZCL_STATUS_SUCCESS;
+        TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID,
+                                          &messages[i], &status));
+        TEST_ASSERT_EQUAL(ESP_ERR_NOT_SUPPORTED, status);
+        TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, messages[i].out.result);
+        TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
+        TEST_ASSERT_EQUAL_UINT32(0, otaInstance.bytesReceived);
+        TEST_ASSERT_EQUAL_UINT32(0, otaInstance.totalSize);
+        TEST_ASSERT_EQUAL(i + 1u, otaErrorEvents);
+        TEST_ASSERT_EQUAL(0, otaCompleteEvents);
+    }
+}
+
+void test_EndpointOTA_RejectsOldAndForeignOffersBeforeFlash(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+               .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                         .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                         .file_version = ZIGBEE_FIRMWARE_VERSION,
+                         .image_size = 1000u}}
+    };
+    esp_err_t status = ESP_OK;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    msg.in.start.file_version++;
+    msg.in.start.image_type++;
+    status = ESP_OK;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    TEST_ASSERT_EQUAL(2, otaErrorEvents);
+}
+
+void test_EndpointOTA_RejectsLegacyAndWildcardManufacturerWithoutFlash(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+               .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                         .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                         .file_version = ZIGBEE_FIRMWARE_VERSION + 1u,
+                         .image_size = 1000u}}
+    };
+    const uint16_t rejected[] = {0x1234u, 0xFFFFu};
+    for (unsigned i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
+        msg.in.start.manuf_code = rejected[i];
+        msg.out.result = EZB_ZCL_STATUS_SUCCESS;
+        esp_err_t status = ESP_OK;
+        TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID,
+                                          &msg, &status));
+        TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+        TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+        TEST_ASSERT_EQUAL(i + 1u, otaErrorEvents);
+        TEST_ASSERT_EQUAL(0, otaCompleteEvents);
+    }
+}
+
+void test_EndpointOTA_SeparateAttemptsReportErrors(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_START,
+               .start = {.manuf_code = ZIGBEE_OTA_MANUFACTURER_CODE,
+                         .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+                         .file_version = ZIGBEE_FIRMWARE_VERSION + 1u,
+                         .image_size = 1000u}}
+    };
+    for (unsigned i = 0; i < 2u; ++i) {
+        esp_err_t status = ESP_OK;
+        msg.out.result = EZB_ZCL_STATUS_SUCCESS;
+        TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID,
+                                          &msg, &status));
+        TEST_ASSERT_EQUAL(ESP_ERR_NOT_SUPPORTED, status);
+        TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+        TEST_ASSERT_EQUAL(i + 1u, otaErrorEvents);
+        TEST_ASSERT_EQUAL(0, otaCompleteEvents);
+    }
+}
+
+void test_EndpointOTA_AbortAndUnknownProgress(void) {
+    IZigbeeEndpoint *ep = EndpointOTA_Create();
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT}
+    };
+    otaInstance.state = OTA_STATE_DOWNLOADING;
+    otaInstance.bytesReceived = 1024;
+    otaInstance.totalSize = 500000;
+    esp_err_t status = ESP_FAIL;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_OK, status);
+    /* Successful cancellation acknowledgment is NOT a successful update. */
     TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_SUCCESS, msg.out.result);
+    TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
+    TEST_ASSERT_EQUAL_UINT32(0, otaInstance.bytesReceived);
+    TEST_ASSERT_EQUAL_UINT32(0, otaInstance.totalSize);
+
+    msg.in.progress = 0xff;
+    msg.out.result = EZB_ZCL_STATUS_SUCCESS;
+    status = ESP_OK;
+    TEST_ASSERT_TRUE(ep->HandleAction(ep, EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg, &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, status);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    TEST_ASSERT_EQUAL(OTA_STATE_ERROR, otaInstance.state);
+    TEST_ASSERT_EQUAL(1, otaErrorEvents);
+    TEST_ASSERT_EQUAL(0, otaCompleteEvents);
 }
 
 void test_EndpointOTA_ProfileValidationAndErrors(void) {
@@ -160,8 +288,13 @@ void test_EndpointOTA_All(void) {
     RUN_TEST(test_EndpointOTA_ProfileValidationAndErrors);
     RUN_TEST(test_EndpointOTA_RegistrationFailurePreservesOwnership);
     RUN_TEST(test_EndpointOTA_Identification);
+    RUN_TEST(test_EndpointOTA_LocalHobbyIdentityIsExplicitlyTestOnly);
     RUN_TEST(test_EndpointOTA_RegisterClusters);
     RUN_TEST(test_EndpointOTA_HandleAction_Progress);
+    RUN_TEST(test_EndpointOTA_AbortAndUnknownProgress);
+    RUN_TEST(test_EndpointOTA_SeparateAttemptsReportErrors);
+    RUN_TEST(test_EndpointOTA_RejectsOldAndForeignOffersBeforeFlash);
+    RUN_TEST(test_EndpointOTA_RejectsLegacyAndWildcardManufacturerWithoutFlash);
 }
 
 #ifndef RACOOL_TARGET_TESTING
