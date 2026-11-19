@@ -125,6 +125,38 @@ Public GitHub source code and ordinary CI artifacts may remain available,
 but **public OTA image/index publishing is not the delivery goal**. No
 subscription, certification fee or manufacturer-code purchase is required.
 
+## Read-only local Zigbee OTA envelope inspection (Issue #28)
+
+`python tools/ota/inspect_local_image.py LOCAL_FILE.ota` reads an **existing**
+Zigbee OTA container; it does not create, sign, copy, publish or upload any
+image or change Zigbee2MQTT settings. Run it from the repository root after
+the official Espressif SDK image builder has produced an image, with the
+private signing workflow kept entirely outside this tool.
+
+The inspector reads the OTA manufacturer, image type and hardware revision
+from `ZigbeeConfig.h`, the current OTA version from
+`resources/product-version.json`, and the smaller OTA slot from
+`partitions.csv`. It independently parses the Zigbee little-endian header
+and one upgrade-image tag. It rejects wrong/wildcard/legacy identity,
+non-increasing fileVersion, missing/wrong hardware range, unsupported
+optional header fields, malformed offsets/lengths/extra tags, oversized
+payloads, and missing ESP application magic/descriptor/SemVer. A bounded
+file-size check runs **before** reading the full image. Successful output
+reports the exact OTA container SHA-512 and metadata as
+`STRUCTURE_PASS_SIGNATURE_UNVERIFIED`, with
+`installation_authorized: false` and `signature_verified: false`.
+
+**Never treat exit code zero as an install/release authorization.** An
+attacker can replace a structurally valid application's contents and compute
+a new hash. This tool cannot prove a genuine RSA-v2 ESP image signature,
+an authorized trusted signed-base migration, a safe flash transaction,
+device identity, RF delivery or real boot/rollback. The required separate
+offline `espsecure.py` signature verification under the expected public
+key and all physical/product gates remain open. No automatic local OTA index
+activation or public feed is implemented here. The registered Python helper
+test `test/Communication/Zigbee/test_local_ota_image.py` covers malformed
+and valid *synthetic unsigned* fixtures; those fixtures must not be installed.
+
 Sources (pinned version):
 - ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
 - ESP-IDF v5.3.1 Secure Boot V2 / Signed App Verification Without Hardware
