@@ -596,6 +596,14 @@ static void zb_action_handler(ezb_zcl_core_action_callback_id_t callback_id, voi
     if (attribute_message) attribute_message->out.result = EZB_ZCL_STATUS_FAIL;
     return;
   }
+  /* Stop can start while the SDK callback waits for the service mutex.
+   * Do not dispatch after taking the lock when shutdown is already active.
+   * OTA output defaults to ABORT before any lock attempt. */
+  if (atomic_load(&zigbeeService.closing)) {
+    if (attribute_message) attribute_message->out.result = EZB_ZCL_STATUS_FAIL;
+    zb_give_mutex();
+    return;
+  }
   IZigbeeEndpoint *curr = zigbeeService.endpointList;
   while (curr) {
     esp_err_t result = ESP_OK;
