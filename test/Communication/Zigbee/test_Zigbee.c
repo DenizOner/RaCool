@@ -432,6 +432,63 @@ void test_Zigbee_OtaProgressRejectsDuringServiceStop(void) {
     TEST_ASSERT_EQUAL(0, mocked_xSemaphoreTake_fake.call_count);
 }
 
+/* Simulate Stop being requested while a callback waits for the service
+ * mutex. Lock admission must not override the new shutdown epoch. */
+static BaseType_t start_stop_during_ota_mutex_take(SemaphoreHandle_t mutex,
+                                                    TickType_t timeout) {
+    (void)timeout;
+    TEST_ASSERT_EQUAL_PTR(zigbeeService.mutex, mutex);
+    atomic_store(&zigbeeService.closing, true);
+    return pdTRUE;
+}
+void test_Zigbee_OtaCancelCannotAckStopStartedWhileTakingLock(void) {
+    zigbeeService.mutex = (SemaphoreHandle_t)1;
+    endpoints[0].HandleAction = handle_ota_action;
+    zigbeeService.endpointList = &endpoints[0];
+    ota_route_calls = 0;
+    mocked_xSemaphoreTake_fake.custom_fake = start_stop_during_ota_mutex_take;
+    ezb_zcl_ota_upgrade_client_progress_message_t msg = {
+        .in = {.progress = EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT},
+        .out = {.result = EZB_ZCL_STATUS_SUCCESS}
+    };
+    zb_action_handler(EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID, &msg);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    TEST_ASSERT_EQUAL(0, ota_route_calls);
+    TEST_ASSERT_EQUAL(1, mocked_xSemaphoreTake_fake.call_count);
+    TEST_ASSERT_EQUAL(1, mocked_xSemaphoreGive_fake.call_count);
+    TEST_ASSERT_TRUE(atomic_load(&zigbeeService.closing));
+}
+void test_Zigbee_OtaQueryCannotRouteAfterStopDuringLock(void) {
+    zigbeeService.mutex = (SemaphoreHandle_t)1;
+    endpoints[0].HandleAction = handle_ota_action;
+    zigbeeService.endpointList = &endpoints[0];
+    ota_route_calls = 0;
+    mocked_xSemaphoreTake_fake.custom_fake = start_stop_during_ota_mutex_take;
+    ezb_zcl_ota_upgrade_query_next_image_rsp_message_t msg = {
+        .out = {.result = EZB_ZCL_STATUS_SUCCESS}
+    };
+    zb_action_handler(EZB_ZCL_CORE_OTA_UPGRADE_QUERY_NEXT_IMAGE_RSP_CB_ID, &msg);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_ABORT, msg.out.result);
+    TEST_ASSERT_EQUAL(0, ota_route_calls);
+    TEST_ASSERT_EQUAL(1, mocked_xSemaphoreTake_fake.call_count);
+    TEST_ASSERT_EQUAL(1, mocked_xSemaphoreGive_fake.call_count);
+    TEST_ASSERT_TRUE(atomic_load(&zigbeeService.closing));
+}
+void test_Zigbee_AttributeFailsIfStopStartsDuringLock(void) {
+    zigbeeService.mutex = (SemaphoreHandle_t)1;
+    endpoints[0].HandleAction = handle_ota_action;
+    zigbeeService.endpointList = &endpoints[0];
+    ota_route_calls = 0;
+    mocked_xSemaphoreTake_fake.custom_fake = start_stop_during_ota_mutex_take;
+    ezb_zcl_set_attr_value_message_t msg = {.out = {.result = EZB_ZCL_STATUS_SUCCESS}};
+    zb_action_handler(EZB_ZCL_CORE_SET_ATTR_VALUE_CB_ID, &msg);
+    TEST_ASSERT_EQUAL(EZB_ZCL_STATUS_FAIL, msg.out.result);
+    TEST_ASSERT_EQUAL(0, ota_route_calls);
+    TEST_ASSERT_EQUAL(1, mocked_xSemaphoreTake_fake.call_count);
+    TEST_ASSERT_EQUAL(1, mocked_xSemaphoreGive_fake.call_count);
+    TEST_ASSERT_TRUE(atomic_load(&zigbeeService.closing));
+}
+
 void test_Zigbee_OtaExplicitCancelOnlyCanOverrideAbort(void) {
     zigbeeService.mutex = (SemaphoreHandle_t)1;
     endpoints[0].HandleAction = handle_ota_action;
