@@ -186,8 +186,12 @@ The pinned SDK's progress and Query Next Image callbacks consume
 results to `EZB_ZCL_STATUS_ABORT` **before** acquiring the service lock:
 contention, Stop, and an absent handler cannot accidentally carry a stale
 `SUCCESS`. EP10 may explicitly acknowledge cancellation only; file transfer
-stages remain rejected. Test cases in `test_Zigbee.c` cover lock contention,
-closing lifecycle, absent handler, query response and explicit cancel.
+stages remain rejected. The service rechecks `closing` after taking
+its mutex: if Stop begins during lock acquisition, callbacks must not reach
+any endpoint; OTA progress/query remain ABORT, attributes return FAIL, and
+the acquired mutex is released. Host tests inject Stop precisely during
+semaphore acquisition for cancel, query and attributes. These mocks do not
+prove a live SDK flash timing or RF delivery deadline.
 
 The official SDK 2.0.5 client example writes in the synchronous progress
 callback. RaCool does **not** borrow that pattern: callback-time multi-MiB
