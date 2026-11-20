@@ -134,16 +134,31 @@ the official Espressif SDK image builder has produced an image, with the
 private signing workflow kept entirely outside this tool.
 
 The inspector reads the OTA manufacturer, image type and hardware revision
-from `ZigbeeConfig.h`, the current OTA version from
-`resources/product-version.json`, and the smaller OTA slot from
+from `ZigbeeConfig.h`, the **candidate** OTA counter from
+`resources/product-version.json`, the current source's exact full product
+SemVer via `tools/product_version.py`, and the smaller OTA slot from
 `partitions.csv`. It independently parses the Zigbee little-endian header
 and one upgrade-image tag. It rejects wrong/wildcard/legacy identity,
-non-increasing fileVersion, missing/wrong hardware range, unsupported
-optional header fields, malformed offsets/lengths/extra tags, oversized
-payloads, and missing ESP application magic/descriptor/SemVer. A bounded
-file-size check runs **before** reading the full image. Successful output
-reports the exact OTA container SHA-512 and metadata as
-`STRUCTURE_PASS_SIGNATURE_UNVERIFIED`, with
+a fileVersion **different from the source candidate** (not merely greater
+than it), missing/wrong hardware range, an ESP app descriptor version
+different from the source product identity, unsupported optional header
+fields, malformed offsets/lengths/extra tags, oversized payloads, and
+missing ESP application magic/descriptor/SemVer.
+
+Use `--previous-ota-version 0x...` only with a separately verified
+**prior installed/released** OTA counter. This optional input must be less
+than the candidate counter. When it is absent, the inspector does **not**
+claim to have verified upgrade ordering. The tool still cannot guarantee
+that a candidate will install or that the current device runs that version.
+
+The input is opened once as a regular file and read in at most
+`OTA-slot-size + envelope-size + 1` bytes. It compares file metadata
+before and after inspection to reject detected concurrent modifications.
+This bounds allocation but **cannot guarantee an atomic snapshot or exclude
+all simultaneous writes**. Generate the completed file in an isolated local
+directory; do not share an actively changing path with a publisher.
+Successful output reports the exact OTA container SHA-512 and metadata
+as `STRUCTURE_PASS_SIGNATURE_UNVERIFIED`, with
 `installation_authorized: false` and `signature_verified: false`.
 
 **Never treat exit code zero as an install/release authorization.** An
@@ -155,7 +170,15 @@ offline `espsecure.py` signature verification under the expected public
 key and all physical/product gates remain open. No automatic local OTA index
 activation or public feed is implemented here. The registered Python helper
 test `test/Communication/Zigbee/test_local_ota_image.py` covers malformed
-and valid *synthetic unsigned* fixtures; those fixtures must not be installed.
+and valid *synthetic unsigned* fixtures, including a genuine round trip
+through the **unmodified official Espressif 2.0.5** image builder mirrored
+at `tools/ota/vendor/esp_zigbee_sdk_2_0_5_image_builder.py` (pinned
+upstream commit `e2fdf4ad8558e5beb306b0d7040072d76244c413`, Git blob
+`f4c6e59f0694c60abc3470a539dd99805105a1c5`, SPDX CC0-1.0).
+That mirrored builder is a test/reproducibility dependency, **not a newly
+designed RaCool format, signing system or public publishing pipeline**.
+The round-trip payload is synthetic/unsigned; it is **not** a real built,
+RSA-verified ESP32-C6 candidate and must never be installed.
 
 Sources (pinned version):
 - ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
