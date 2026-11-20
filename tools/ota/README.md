@@ -125,6 +125,155 @@ Public GitHub source code and ordinary CI artifacts may remain available,
 but **public OTA image/index publishing is not the delivery goal**. No
 subscription, certification fee or manufacturer-code purchase is required.
 
+## Read-only local Zigbee OTA envelope inspection (Issue #28)
+
+`python tools/ota/inspect_local_image.py LOCAL_FILE.ota` reads an **existing**
+Zigbee OTA container; it does not create, sign, copy, publish or upload any
+image or change Zigbee2MQTT settings. Run it from the repository root after
+the official Espressif SDK image builder has produced an image, with the
+private signing workflow kept entirely outside this tool.
+
+The inspector reads the OTA manufacturer, image type and hardware revision
+from `ZigbeeConfig.h`, the **candidate** OTA counter from
+`resources/product-version.json`, the current source's exact full product
+SemVer via `tools/product_version.py`, and the smaller OTA slot from
+`partitions.csv`. It independently parses the Zigbee little-endian header
+and one upgrade-image tag. It rejects wrong/wildcard/legacy identity,
+a fileVersion **different from the source candidate** (not merely greater
+than it), missing/wrong hardware range, an ESP app descriptor version
+different from the source product identity, unsupported optional header
+fields, malformed offsets/lengths/extra tags, oversized payloads, and
+missing ESP application magic/descriptor/SemVer.
+
+Use `--previous-ota-version 0x...` only with a separately verified
+**prior installed/released** OTA counter. This optional input must be less
+than the candidate counter. When it is absent, the inspector does **not**
+claim to have verified upgrade ordering. The tool still cannot guarantee
+that a candidate will install or that the current device runs that version.
+
+The input is opened once as a regular file and read in at most
+`OTA-slot-size + envelope-size + 1` bytes. It compares file metadata
+before and after inspection to reject detected concurrent modifications.
+This bounds allocation but **cannot guarantee an atomic snapshot or exclude
+all simultaneous writes**. Generate the completed file in an isolated local
+directory; do not share an actively changing path with a publisher.
+Successful output reports the exact OTA container SHA-512 and metadata
+as `STRUCTURE_PASS_SIGNATURE_UNVERIFIED`, with
+`installation_authorized: false` and `signature_verified: false`.
+
+**Never treat exit code zero as an install/release authorization.** An
+attacker can replace a structurally valid application's contents and compute
+a new hash. This tool cannot prove a genuine RSA-v2 ESP image signature,
+an authorized trusted signed-base migration, a safe flash transaction,
+device identity, RF delivery or real boot/rollback. The required separate
+offline `espsecure.py` signature verification under the expected public
+key and all physical/product gates remain open. No automatic local OTA index
+activation or public feed is implemented here.
+
+## Read-only Zigbee2MQTT local index check (Issue #28)
+
+The index consistency checker is an **offline validator only**; it neither
+generates an index nor writes/copies firmware, uploads to Zigbee2MQTT, enables
+OTA, or changes the device. After a separately created candidate index and
+Zigbee OTA container exist, keep both in a private **staging** directory
+which is NOT the active Zigbee2MQTT data directory. Run:
+
+    python tools/ota/check_local_index.py STAGING/racool-index.json
+
+For a candidate with an independently verified previous **installed/released**
+OTA counter, add `--previous-ota-version 0x...`. Never guess the previous
+version; omitting this option leaves `upgrade_order_verified=false`.
+
+The expected file is a JSON **array containing exactly one** RaCool entry.
+Required fields are `manufacturerCode`, `imageType`, `fileVersion`,
+`fileSize`, `sha512`, `hardwareVersionMin`, `hardwareVersionMax`,
+`modelId`, `manufacturerName`, `url` and `fileName`. The optional
+`otaHeaderString`, if present, must match the OTA header's exact ASCII bytes,
+including NUL padding. No extra fields are accepted (in particular, not
+`force`, downgrade overrides, or remote URLs). The model must be
+`RaCool-ESP32C6` and manufacturer list exactly `["RaCool"]`. The index's
+`url` and `fileName` must be the **same simple filename** ending in
+`.ota` or `.zigbee`; the image must exist beside the index. The checker
+intentionally rejects absolute/parent/subdirectory paths, URI schemes,
+percent encoding and symbolic links, even when a broader Zigbee2MQTT version
+might support them. This is a restricted RaCool-local workflow, not a
+general-purpose Zigbee2MQTT index validator.
+
+The entry's numeric identity, version, hardware range and size must match
+the **actual** existing OTA file, and its SHA-512 must match a fresh bounded
+read. The index is limited to 16 KiB; malformed JSON, duplicate keys,
+non-integer numeric values, missing image and detected index/image mutation
+fail closed. It does not lock both files into an atomic filesystem snapshot:
+a separate controlled publishing procedure must stage immutable inputs and
+recheck the exact bytes before any future authorized activation. Paths are
+resolved relative to the index's directory for this checker; the actual
+Zigbee2MQTT server/container must separately prove it resolves the file
+correctly from its data directory. No automatic OTA checks/scheduling are
+configured by this command. A PASS returns
+`LOCAL_INDEX_MATCH_SIGNATURE_UNVERIFIED`, with both
+`signature_verified=false` and `installation_authorized=false`.
+**Unsigned synthetic fixtures and a consistent hash do not authorize an
+OTA installation or publishing a local index.** Independently validated
+RSA-v2 signed firmware, a trusted signed base, CodeQL/CI and full hardware
+acceptance are still required.
+
+The registered Python test
+`test/Communication/Zigbee/test_local_ota_index.py` exercises local
+positive/negative index matching with the existing offline envelope
+inspector; no private keys, network connections or hardware are used.
+ The registered Python helper
+test `test/Communication/Zigbee/test_local_ota_image.py` covers malformed
+and valid *synthetic unsigned* fixtures, including a genuine round trip
+through the **unmodified official Espressif 2.0.5** image builder mirrored
+at `tools/ota/vendor/esp_zigbee_sdk_2_0_5_image_builder.py` (pinned
+upstream commit `e2fdf4ad8558e5beb306b0d7040072d76244c413`, Git blob
+`f4c6e59f0694c60abc3470a539dd99805105a1c5`, SPDX CC0-1.0).
+That mirrored builder is a test/reproducibility dependency, **not a newly
+designed RaCool format, signing system or public publishing pipeline**.
+The round-trip payload is synthetic/unsigned; it is **not** a real built,
+RSA-verified ESP32-C6 candidate and must never be installed.
+
+## CI preflight of the real compiled app (Issue #28)
+
+The Linux CI job first captures the **clean source checkout identity**
+into an ignored build-local file, before PlatformIO can generate any
+build outputs:
+
+`python tools/ota/check_compiled_candidate.py --capture-source-identity
+.pio/racool-prebuild-identity.json`
+
+After `pio run -e esp32-c6-devkitc-1`, Linux CI calls:
+
+`python tools/ota/check_compiled_candidate.py --firmware
+.pio/build/esp32-c6-devkitc-1/firmware.bin --source-identity
+.pio/racool-prebuild-identity.json`
+
+The snapshot records the clean Git HEAD, full app SemVer generated from
+`tools/product_version.py`, manifest SHA-256 and candidate OTA version.
+The checker fails if the **commit, manifest or OTA code** differs from
+that pre-build snapshot. This avoids deriving an incorrect expected
+`.dirty` suffix if compiling creates tracked or untracked files.
+It does not skip the version match: the ESP descriptor must equal the
+**recorded pre-build source identity** byte-for-byte, and the raw app must
+fit the smaller OTA partition in `partitions.csv`. Snapshot capture
+writes **only an ignored `.pio` build-local metadata file**; the
+post-build firmware inspection remains read-only. The checker also
+checks ESP image/descriptor magic and streams
+SHA-256 through bounded reads on one regular file handle, and rejects
+detected concurrent file changes. An absent, truncated, corrupt,
+version-mismatched or oversized `firmware.bin` fails CI.
+
+The result `COMPILED_APP_SOURCE_MATCH_SIGNATURE_UNVERIFIED` explicitly
+sets `installation_authorized=false` and `signature_verified=false`.
+The active production firmware is unsigned; this check does **not** add
+an RSA signature block, prove that a future signed binary fits its slot,
+validate every ESP segment/checksum, check an authorized previous release,
+write an OTA index or touch any device. Its output SHA-256 is diagnostic,
+not a trusted release digest or signature. Unit tests in
+`test/Communication/Zigbee/test_local_ota_image.py` cover the read-only
+accept/reject cases. CI PASS is **not** permission to flash or publish an
+OTA image. Signed-artifact and physical acceptance remain blocked.
+
 Sources (pinned version):
 - ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
 - ESP-IDF v5.3.1 Secure Boot V2 / Signed App Verification Without Hardware
