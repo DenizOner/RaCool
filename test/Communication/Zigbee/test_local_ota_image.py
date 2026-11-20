@@ -16,9 +16,14 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "tools/ota/inspect_local_image.py"
 OFFICIAL_BUILDER = ROOT / "tools/ota/vendor/esp_zigbee_sdk_2_0_5_image_builder.py"
+BUILT_PREFLIGHT = ROOT / "tools/ota/check_compiled_candidate.py"
 spec = importlib.util.spec_from_file_location("inspect_local_image", SCRIPT)
 checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
+built_spec = importlib.util.spec_from_file_location("check_compiled_candidate", BUILT_PREFLIGHT)
+built_checker = importlib.util.module_from_spec(built_spec)
+sys.path.insert(0, str(BUILT_PREFLIGHT.parent))
+built_spec.loader.exec_module(built_checker)
 
 
 class LocalOtaEnvelopeTests(unittest.TestCase):
@@ -251,6 +256,90 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
                 with patch.object(checker.os, "fstat", side_effect=[baseline, changed]):
                     with self.assertRaisesRegex(ValueError, "changed during inspection"):
                         checker.inspect_file(file_path, ROOT)
+
+
+    def test_compiled_candidate_matches_source_version_without_authorizing_install(self):
+        import hashlib
+        app = self.fixture()[66:]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "firmware.bin"
+            path.write_bytes(app)
+            report = built_checker.check_compiled_candidate(path, ROOT)
+            self.assertEqual("COMPILED_APP_SOURCE_MATCH_SIGNATURE_UNVERIFIED", report["status"])
+            self.assertTrue(report["source_version_matched"])
+            self.assertEqual(self.policy["app_version"], report["appVersion"])
+            self.assertEqual(self.policy["candidate_version"], report["otaFileVersion"])
+            self.assertEqual(len(app), report["fileSize"])
+            self.assertEqual(self.policy["slot_size"], report["otaSlotCapacity"])
+            self.assertEqual(hashlib.sha256(app).hexdigest(), report["sha256"])
+            self.assertFalse(report["signature_verified"])
+            self.assertFalse(report["installation_authorized"])
+            self.assertEqual(app, path.read_bytes())
+
+    def test_compiled_candidate_rejects_corrupted_esp_magic_descriptor_and_version(self):
+        app = self.fixture()[66:]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "firmware.bin"
+            for index, value in ((0, 0), (32, 0), (50, 0xff)):
+                wrong = bytearray(app)
+                wrong[index] = value
+                path.write_bytes(wrong)
+                with self.subTest(index=index), self.assertRaises(ValueError):
+                    built_checker.check_compiled_candidate(path, ROOT)
+
+    def test_compiled_candidate_rejects_other_valid_semver_from_source(self):
+        wrong = bytearray(self.fixture()[66:])
+        wrong[48:80] = b"2.0.0" + bytes(27)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "firmware.bin"
+            path.write_bytes(wrong)
+            with self.assertRaisesRegex(ValueError, "differs from source"):
+                built_checker.check_compiled_candidate(path, ROOT)
+
+    def test_compiled_candidate_rejects_short_missing_and_oversized_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "firmware.bin"
+            path.write_bytes(b"\xe9" * 79)
+            with self.assertRaisesRegex(ValueError, "outside OTA"):
+                built_checker.check_compiled_candidate(path, ROOT)
+            with path.open("wb") as handle:
+                handle.truncate(self.policy["slot_size"] + 1)
+            with self.assertRaisesRegex(ValueError, "outside OTA"):
+                built_checker.check_compiled_candidate(path, ROOT)
+            with self.assertRaises(OSError):
+                built_checker.check_compiled_candidate(Path(directory) / "missing.bin", ROOT)
+
+    def test_compiled_candidate_rejects_detected_file_change_without_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "firmware.bin"
+            path.write_bytes(self.fixture()[66:])
+            baseline = path.stat()
+            modified = SimpleNamespace(st_dev=baseline.st_dev, st_ino=baseline.st_ino,
+                                       st_size=baseline.st_size,
+                                       st_mtime_ns=baseline.st_mtime_ns + 1,
+                                       st_ctime_ns=baseline.st_ctime_ns)
+            with patch.object(built_checker.os, "fstat", side_effect=[baseline, modified]):
+                with self.assertRaisesRegex(ValueError, "changed during inspection"):
+                    built_checker.check_compiled_candidate(path, ROOT)
+
+    def test_compiled_candidate_cli_fail_closed_and_no_file_modifications(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "firmware.bin"
+            image = self.fixture()[66:]
+            path.write_bytes(image)
+            command = [sys.executable, str(BUILT_PREFLIGHT), "--firmware", str(path),
+                       "--repo-root", str(ROOT)]
+            passed = subprocess.run(command, text=True, capture_output=True, check=False)
+            self.assertEqual(0, passed.returncode, passed.stderr)
+            parsed = json.loads(passed.stdout)
+            self.assertFalse(parsed["signature_verified"])
+            self.assertFalse(parsed["installation_authorized"])
+            self.assertEqual(image, path.read_bytes())
+            path.write_bytes(b"bad")
+            failed = subprocess.run(command, text=True, capture_output=True, check=False)
+            self.assertNotEqual(0, failed.returncode)
+            self.assertIn("REJECTED:", failed.stderr)
+            self.assertNotIn(str(path), failed.stderr)
 
     def test_cli_reports_metadata_only_without_mutating_file(self):
         with tempfile.TemporaryDirectory() as d:
