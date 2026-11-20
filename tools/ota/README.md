@@ -180,6 +180,31 @@ designed RaCool format, signing system or public publishing pipeline**.
 The round-trip payload is synthetic/unsigned; it is **not** a real built,
 RSA-verified ESP32-C6 candidate and must never be installed.
 
+## CI preflight of the real compiled app (Issue #28)
+
+`python tools/ota/check_compiled_candidate.py --firmware
+.pio/build/esp32-c6-devkitc-1/firmware.bin` reads the **actual** PlatformIO
+firmware output after the production ESP32-C6 build. The Linux CI job
+calls this command immediately after `pio run -e esp32-c6-devkitc-1`,
+before artifact upload. The check compares the ESP app descriptor's full
+SemVer with `tools/product_version.py`'s identity for the exact checked-out
+source and verifies the raw app fits the smaller OTA partition declared
+in `partitions.csv`. It checks the ESP image/descriptor magic, streams
+SHA-256 through bounded reads on one regular file handle, and rejects
+detected concurrent file changes. An absent, truncated, corrupt,
+version-mismatched or oversized `firmware.bin` fails CI.
+
+The result `COMPILED_APP_SOURCE_MATCH_SIGNATURE_UNVERIFIED` explicitly
+sets `installation_authorized=false` and `signature_verified=false`.
+The active production firmware is unsigned; this check does **not** add
+an RSA signature block, prove that a future signed binary fits its slot,
+validate every ESP segment/checksum, check an authorized previous release,
+write an OTA index or touch any device. Its output SHA-256 is diagnostic,
+not a trusted release digest or signature. Unit tests in
+`test/Communication/Zigbee/test_local_ota_image.py` cover the read-only
+accept/reject cases. CI PASS is **not** permission to flash or publish an
+OTA image. Signed-artifact and physical acceptance remain blocked.
+
 Sources (pinned version):
 - ESP-IDF v5.3.1 `components/bootloader/Kconfig.projbuild`
 - ESP-IDF v5.3.1 Secure Boot V2 / Signed App Verification Without Hardware
