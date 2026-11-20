@@ -2,15 +2,20 @@
 """Negative acceptance tests for the read-only RaCool OTA envelope inspector."""
 import importlib.util
 import json
+import os
+import stat
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "tools/ota/inspect_local_image.py"
+OFFICIAL_BUILDER = ROOT / "tools/ota/vendor/esp_zigbee_sdk_2_0_5_image_builder.py"
 spec = importlib.util.spec_from_file_location("inspect_local_image", SCRIPT)
 checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
@@ -27,11 +32,12 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
         if app_size >= 80:
             app[0] = 0xE9
             app[32:36] = bytes.fromhex("3254cdab")
-            app[48:53] = b"1.0.1"
+            version = p["app_version"].encode("ascii")
+            app[48:48 + len(version)] = version
         total = 60 + 6 + len(app)
         args = dict(magic=checker.FILE_MAGIC, version=checker.HEADER_VERSION,
                     header_len=60, flags=4, manufacturer=p["manufacturer"],
-                    image_type=p["image_type"], file_version=p["current_version"] + 1,
+                    image_type=p["image_type"], file_version=p["candidate_version"],
                     stack=2, total=total, low_hw=p["hardware_version"],
                     high_hw=p["hardware_version"], tag_id=0,
                     tag_length=len(app))
@@ -56,7 +62,9 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
         self.assertEqual(self.policy["image_type"], result["imageType"])
         self.assertEqual(128 + 66, result["fileSize"])
         self.assertEqual(128, len(result["sha512"]))
-        self.assertEqual("1.0.1", result["appVersion"])
+        self.assertEqual(self.policy["app_version"], result["appVersion"])
+        self.assertTrue(result["source_version_matched"])
+        self.assertFalse(result["upgrade_order_verified"])
 
     def test_rejects_foreign_legacy_and_wildcard_manufacturers(self):
         for code in (0x1234, 0xFFFF, 0xFFF2, 0x0000):
@@ -74,11 +82,20 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
             with self.subTest(key=key, value=value):
                 self.check_rejects(self.fixture(**{key: value}))
 
-    def test_rejects_same_old_and_wildcard_file_versions(self):
-        for value in (0, self.policy["current_version"],
-                      self.policy["current_version"] - 1, 0xFFFFFFFF):
+    def test_rejects_counter_different_from_source_candidate(self):
+        for value in (0, self.policy["candidate_version"] - 1,
+                      self.policy["candidate_version"] + 1, 0xFFFFFFFF):
             with self.subTest(version=value):
                 self.check_rejects(self.fixture(file_version=value))
+
+    def test_previous_counter_is_optional_but_cannot_authorize_reuse(self):
+        candidate = self.policy["candidate_version"]
+        result = checker.inspect_structure(self.fixture(), self.policy, candidate - 1)
+        self.assertTrue(result["upgrade_order_verified"])
+        self.assertFalse(result["installation_authorized"])
+        for old in (candidate, candidate + 1, 0xFFFFFFFF, -1, True, "0"):
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                checker.inspect_structure(self.fixture(), self.policy, old)
 
     def test_rejects_invalid_or_unrelated_hardware_ranges(self):
         hardware = self.policy["hardware_version"]
@@ -151,6 +168,90 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checker.inspect_file(path, ROOT)
 
+
+    def test_source_descriptor_must_match_exact_semver_identity(self):
+        wrong = bytearray(self.fixture())
+        wrong[114:146] = b"2.0.0" + bytes(27)
+        self.check_rejects(wrong)
+
+    def test_official_sdk_builder_produces_the_same_exact_ota_envelope(self):
+        """Call the unmodified, pinned Espressif builder, not a local reimplementation."""
+        p = self.policy
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            app = out / "synthetic-unsigned-app.bin"
+            app.write_bytes(self.fixture()[66:])
+            command = [
+                sys.executable, str(OFFICIAL_BUILDER),
+                "--manuf-id", hex(p["manufacturer"]),
+                "--image-type", hex(p["image_type"]),
+                "--file-version", hex(p["candidate_version"]),
+                "--min-hw-ver", str(p["hardware_version"]),
+                "--max-hw-ver", str(p["hardware_version"]),
+                "--tag", "0", str(app),
+            ]
+            run = subprocess.run(command, cwd=out, capture_output=True,
+                                 text=True, check=False)
+            self.assertEqual(0, run.returncode, run.stderr)
+            outputs = list(out.glob("*-ota-file.zigbee"))
+            self.assertEqual(1, len(outputs))
+            actual = outputs[0].read_bytes()
+            self.assertEqual(self.fixture(), actual)
+            parsed = checker.inspect_file(outputs[0], ROOT, p["candidate_version"] - 1)
+            self.assertTrue(parsed["source_version_matched"])
+            self.assertTrue(parsed["upgrade_order_verified"])
+            self.assertFalse(parsed["signature_verified"])
+            self.assertFalse(parsed["installation_authorized"])
+
+    def test_file_reader_never_requests_more_than_one_byte_above_limit(self):
+        p = self.policy
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory) / "sample.ota"
+            file_path.write_bytes(self.fixture())
+            requests = []
+
+            class GrowingStream:
+                def __init__(self, handle):
+                    self.handle = handle
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_):
+                    return None
+
+                def fileno(self):
+                    return self.handle.fileno()
+
+                def read(self, count):
+                    requests.append(count)
+                    return bytes(count)
+
+            with file_path.open("rb") as handle:
+                with patch.object(checker, "load_policy", return_value=p):
+                    with patch.object(Path, "open", return_value=GrowingStream(handle)):
+                        with self.assertRaisesRegex(ValueError, "grew"):
+                            checker.inspect_file(file_path, ROOT)
+            self.assertEqual([p["slot_size"] + 67], requests)
+
+    def test_file_reader_rejects_nonregular_and_during_read_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory) / "sample.ota"
+            file_path.write_bytes(self.fixture())
+            baseline = os.stat(file_path)
+            not_regular = SimpleNamespace(st_mode=stat.S_IFIFO, st_size=baseline.st_size)
+            changed = SimpleNamespace(st_mode=baseline.st_mode, st_dev=baseline.st_dev,
+                                      st_ino=baseline.st_ino, st_size=baseline.st_size,
+                                      st_mtime_ns=baseline.st_mtime_ns + 1,
+                                      st_ctime_ns=baseline.st_ctime_ns)
+            with patch.object(checker, "load_policy", return_value=self.policy):
+                with patch.object(checker.os, "fstat", return_value=not_regular):
+                    with self.assertRaisesRegex(ValueError, "regular file"):
+                        checker.inspect_file(file_path, ROOT)
+                with patch.object(checker.os, "fstat", side_effect=[baseline, changed]):
+                    with self.assertRaisesRegex(ValueError, "changed during inspection"):
+                        checker.inspect_file(file_path, ROOT)
+
     def test_cli_reports_metadata_only_without_mutating_file(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "sample.ota"
@@ -162,6 +263,17 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
             parsed = json.loads(result.stdout)
             self.assertFalse(parsed["installation_authorized"])
             self.assertFalse(parsed["signature_verified"])
+            self.assertTrue(parsed["source_version_matched"])
+            self.assertFalse(parsed["upgrade_order_verified"])
+            ordered = subprocess.run(args + ["--previous-ota-version",
+                                              hex(self.policy["candidate_version"] - 1)],
+                                     capture_output=True, text=True, check=False)
+            self.assertEqual(0, ordered.returncode, ordered.stderr)
+            self.assertTrue(json.loads(ordered.stdout)["upgrade_order_verified"])
+            reused = subprocess.run(args + ["--previous-ota-version",
+                                             hex(self.policy["candidate_version"])],
+                                    capture_output=True, text=True, check=False)
+            self.assertNotEqual(0, reused.returncode)
             self.assertEqual(blob, path.read_bytes())
             path.write_bytes(b"invalid")
             rejected = subprocess.run(args, capture_output=True, text=True, check=False)
