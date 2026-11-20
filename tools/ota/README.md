@@ -182,14 +182,30 @@ RSA-verified ESP32-C6 candidate and must never be installed.
 
 ## CI preflight of the real compiled app (Issue #28)
 
+The Linux CI job first captures the **clean source checkout identity**
+into an ignored build-local file, before PlatformIO can generate any
+build outputs:
+
+`python tools/ota/check_compiled_candidate.py --capture-source-identity
+.pio/racool-prebuild-identity.json`
+
+After `pio run -e esp32-c6-devkitc-1`, Linux CI calls:
+
 `python tools/ota/check_compiled_candidate.py --firmware
-.pio/build/esp32-c6-devkitc-1/firmware.bin` reads the **actual** PlatformIO
-firmware output after the production ESP32-C6 build. The Linux CI job
-calls this command immediately after `pio run -e esp32-c6-devkitc-1`,
-before artifact upload. The check compares the ESP app descriptor's full
-SemVer with `tools/product_version.py`'s identity for the exact checked-out
-source and verifies the raw app fits the smaller OTA partition declared
-in `partitions.csv`. It checks the ESP image/descriptor magic, streams
+.pio/build/esp32-c6-devkitc-1/firmware.bin --source-identity
+.pio/racool-prebuild-identity.json`
+
+The snapshot records the clean Git HEAD, full app SemVer generated from
+`tools/product_version.py`, manifest SHA-256 and candidate OTA version.
+The checker fails if the **commit, manifest or OTA code** differs from
+that pre-build snapshot. This avoids deriving an incorrect expected
+`.dirty` suffix if compiling creates tracked or untracked files.
+It does not skip the version match: the ESP descriptor must equal the
+**recorded pre-build source identity** byte-for-byte, and the raw app must
+fit the smaller OTA partition in `partitions.csv`. Snapshot capture
+writes **only an ignored `.pio` build-local metadata file**; the
+post-build firmware inspection remains read-only. The checker also
+checks ESP image/descriptor magic and streams
 SHA-256 through bounded reads on one regular file handle, and rejects
 detected concurrent file changes. An absent, truncated, corrupt,
 version-mismatched or oversized `firmware.bin` fails CI.
