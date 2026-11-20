@@ -58,11 +58,14 @@ jobs:
           restore-keys: |
             pio-firmware-${{ runner.os }}-
 
+      - name: Capture Clean Source Identity Before Firmware Build
+        run: python tools/ota/check_compiled_candidate.py --capture-source-identity .pio/racool-prebuild-identity.json
+
       - name: Build Firmware (Production ESP32-C6)
         run: pio run -e esp32-c6-devkitc-1
 
       - name: Verify Compiled ESP32-C6 App Identity and OTA Slot (read-only)
-        run: python tools/ota/check_compiled_candidate.py --firmware .pio/build/esp32-c6-devkitc-1/firmware.bin
+        run: python tools/ota/check_compiled_candidate.py --firmware .pio/build/esp32-c6-devkitc-1/firmware.bin --source-identity .pio/racool-prebuild-identity.json
 
       - name: Install Native Test Dependencies
         run: pio pkg install -e native
