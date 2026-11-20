@@ -68,6 +68,7 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
         self.assertEqual(128 + 66, result["fileSize"])
         self.assertEqual(128, len(result["sha512"]))
         self.assertEqual(self.policy["app_version"], result["appVersion"])
+        self.assertEqual("\0" * 32, result["otaHeaderString"])
         self.assertTrue(result["source_version_matched"])
         self.assertFalse(result["upgrade_order_verified"])
 

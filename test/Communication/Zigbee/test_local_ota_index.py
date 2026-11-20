@@ -72,6 +72,7 @@ class LocalIndexTests(unittest.TestCase):
         self.assertFalse(result["installation_authorized"])
         self.assertFalse(result["upgrade_order_verified"])
         self.assertEqual(self.inspected["sha512"], result["sha512"])
+        self.assertEqual("\0" * 32, self.inspected["otaHeaderString"])
         self.assertEqual(before_index, self.index_path.read_bytes())
         self.assertEqual(before_image, self.image_path.read_bytes())
 
@@ -170,7 +171,7 @@ class LocalIndexTests(unittest.TestCase):
     def test_rejects_oversized_invalid_and_nonfinite_json(self):
         self.index_path.write_bytes(b" " * (index_checker.MAX_INDEX_BYTES + 1))
         self.assert_rejected()
-        for blob in (b"\xff", b"[", b"[NaN]", b"[Infinity]", b"null"):
+        for blob in (b"\xff", b"[", b"[NaN]", b"[Infinity]", b"null", b"[" * 1400 + b"0" + b"]" * 1400):
             with self.subTest(blob=blob):
                 self.index_path.write_bytes(blob)
                 self.assert_rejected()

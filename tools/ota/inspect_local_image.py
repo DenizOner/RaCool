@@ -137,6 +137,7 @@ def inspect_structure(data, policy, previous_version=None):
         "hardwareMin": low_hw,
         "hardwareMax": high_hw,
         "appVersion": app_version,
+        "otaHeaderString": _name.decode("ascii"),
         "sha512": hashlib.sha512(data).hexdigest(),
     }
 

@@ -14,7 +14,7 @@ import struct
 import sys
 from pathlib import Path
 
-from inspect_local_image import OTA_HEADER, inspect_file
+from inspect_local_image import inspect_file
 
 MAX_INDEX_BYTES = 16 * 1024
 SAFE_OTA_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:ota|zigbee)\Z")
@@ -54,7 +54,7 @@ def _read_local_index(path):
     try:
         payload = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_keys,
                              parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON constant")))
-    except (UnicodeError, json.JSONDecodeError) as error:
+    except (UnicodeError, json.JSONDecodeError, RecursionError) as error:
         raise ValueError("invalid UTF-8 JSON index") from error
     if type(payload) is not list or len(payload) != 1 or type(payload[0]) is not dict:
         raise ValueError("index must contain exactly one RaCool image")
@@ -94,14 +94,8 @@ def validate_index(index_path, root, previous_version=None):
             not hmac.compare_digest(checksum, inspected["sha512"])):
         raise ValueError("index SHA-512 does not match OTA image")
     if "otaHeaderString" in entry:
-        with image_path.open("rb") as stream:
-            header = stream.read(OTA_HEADER.size)
-        raw_name = OTA_HEADER.unpack(header)[8]
-        try:
-            label = raw_name.decode("ascii")
-        except UnicodeError as error:
-            raise ValueError("invalid OTA header string") from error
-        if type(entry["otaHeaderString"]) is not str or entry["otaHeaderString"] != label:
+        if (type(entry["otaHeaderString"]) is not str or
+                entry["otaHeaderString"] != inspected["otaHeaderString"]):
             raise ValueError("index OTA header string mismatch")
     if index_path.is_symlink() or _fingerprint(index_path.stat()) != original_index:
         raise ValueError("index changed during image inspection")
