@@ -258,6 +258,80 @@ class LocalOtaEnvelopeTests(unittest.TestCase):
                         checker.inspect_file(file_path, ROOT)
 
 
+
+    def test_prebuild_identity_snapshot_prevents_postbuild_dirty_version_drift(self):
+        """The source HEAD is frozen before build, not derived from later dirt."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            resources = root / "resources"
+            resources.mkdir()
+            (resources / "product-version.json").write_bytes(
+                (ROOT / "resources/product-version.json").read_bytes())
+            image = root / "firmware.bin"
+            image.write_bytes(self.fixture()[66:])
+            saved = root / ".pio/source.json"
+            pinned_head = "a" * 40
+            with patch.object(built_checker, "git_identity", return_value=("a" * 12, False, [])), \
+                 patch.object(built_checker, "_source_head", return_value=pinned_head), \
+                 patch.object(built_checker, "load_policy", return_value=self.policy):
+                frozen = built_checker.capture_source_identity(saved, root)
+                self.assertEqual(self.policy["app_version"], frozen["app_version"])
+                self.assertTrue(saved.is_file())
+                # Simulate a tracked build artifact making Git identity 'dirty'.
+                dirty_policy = {**self.policy, "app_version": self.policy["app_version"] + ".dirty"}
+                with patch.object(built_checker, "load_policy", return_value=dirty_policy):
+                    report = built_checker.check_compiled_candidate(image, root, saved)
+                    self.assertEqual(frozen["app_version"], report["appVersion"])
+                    self.assertFalse(report["installation_authorized"])
+                    with self.assertRaisesRegex(ValueError, "differs from source"):
+                        built_checker.check_compiled_candidate(image, root)
+            self.assertEqual(self.fixture()[66:], image.read_bytes())
+
+    def test_prebuild_identity_snapshot_rejects_stale_commit_manifest_or_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            resources = root / "resources"
+            resources.mkdir()
+            (resources / "product-version.json").write_bytes(
+                (ROOT / "resources/product-version.json").read_bytes())
+            output = root / ".pio/source.json"
+            with patch.object(built_checker, "git_identity", return_value=("a" * 12, False, [])), \
+                 patch.object(built_checker, "_source_head", return_value="a" * 40), \
+                 patch.object(built_checker, "load_policy", return_value=self.policy):
+                built_checker.capture_source_identity(output, root)
+                with patch.object(built_checker, "_source_head", return_value="b" * 40):
+                    with self.assertRaisesRegex(ValueError, "does not match checkout"):
+                        built_checker._read_source_identity(output, root, self.policy)
+                with self.assertRaisesRegex(ValueError, "does not match checkout"):
+                    built_checker._read_source_identity(
+                        output, root, {**self.policy, "candidate_version": self.policy["candidate_version"] + 1})
+                (resources / "product-version.json").write_text(
+                    '{"base_version":"99.0.0","ota_file_version":16908288}')
+                with self.assertRaisesRegex(ValueError, "does not match checkout"):
+                    built_checker._read_source_identity(output, root, self.policy)
+                output.write_bytes(b"{" + b"x" * 2049)
+                with self.assertRaisesRegex(ValueError, "exceeds limit"):
+                    built_checker._read_source_identity(output, root, self.policy)
+
+    def test_source_capture_rejects_dirty_checkout_and_outside_build_dir(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            resources = root / "resources"
+            resources.mkdir()
+            (resources / "product-version.json").write_bytes(
+                (ROOT / "resources/product-version.json").read_bytes())
+            destination = root / ".pio/snapshot.json"
+            with patch.object(built_checker, "load_policy", return_value=self.policy), \
+                 patch.object(built_checker, "_source_head", return_value="a" * 40):
+                with patch.object(built_checker, "git_identity", return_value=("a" * 12, True, [])):
+                    with self.assertRaisesRegex(ValueError, "clean Git checkout"):
+                        built_checker.capture_source_identity(destination, root)
+                    self.assertFalse(destination.exists())
+                with patch.object(built_checker, "git_identity", return_value=("a" * 12, False, [])):
+                    with self.assertRaisesRegex(ValueError, "inside .pio"):
+                        built_checker.capture_source_identity(root / "tracked.json", root)
+            self.assertFalse((root / "tracked.json").exists())
+
     def test_compiled_candidate_matches_source_version_without_authorizing_install(self):
         import hashlib
         app = self.fixture()[66:]
