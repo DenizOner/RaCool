@@ -168,7 +168,60 @@ an authorized trusted signed-base migration, a safe flash transaction,
 device identity, RF delivery or real boot/rollback. The required separate
 offline `espsecure.py` signature verification under the expected public
 key and all physical/product gates remain open. No automatic local OTA index
-activation or public feed is implemented here. The registered Python helper
+activation or public feed is implemented here.
+
+## Read-only Zigbee2MQTT local index check (Issue #28)
+
+The index consistency checker is an **offline validator only**; it neither
+generates an index nor writes/copies firmware, uploads to Zigbee2MQTT, enables
+OTA, or changes the device. After a separately created candidate index and
+Zigbee OTA container exist, keep both in a private **staging** directory
+which is NOT the active Zigbee2MQTT data directory. Run:
+
+    python tools/ota/check_local_index.py STAGING/racool-index.json
+
+For a candidate with an independently verified previous **installed/released**
+OTA counter, add `--previous-ota-version 0x...`. Never guess the previous
+version; omitting this option leaves `upgrade_order_verified=false`.
+
+The expected file is a JSON **array containing exactly one** RaCool entry.
+Required fields are `manufacturerCode`, `imageType`, `fileVersion`,
+`fileSize`, `sha512`, `hardwareVersionMin`, `hardwareVersionMax`,
+`modelId`, `manufacturerName`, `url` and `fileName`. The optional
+`otaHeaderString`, if present, must match the OTA header's exact ASCII bytes,
+including NUL padding. No extra fields are accepted (in particular, not
+`force`, downgrade overrides, or remote URLs). The model must be
+`RaCool-ESP32C6` and manufacturer list exactly `["RaCool"]`. The index's
+`url` and `fileName` must be the **same simple filename** ending in
+`.ota` or `.zigbee`; the image must exist beside the index. The checker
+intentionally rejects absolute/parent/subdirectory paths, URI schemes,
+percent encoding and symbolic links, even when a broader Zigbee2MQTT version
+might support them. This is a restricted RaCool-local workflow, not a
+general-purpose Zigbee2MQTT index validator.
+
+The entry's numeric identity, version, hardware range and size must match
+the **actual** existing OTA file, and its SHA-512 must match a fresh bounded
+read. The index is limited to 16 KiB; malformed JSON, duplicate keys,
+non-integer numeric values, missing image and detected index/image mutation
+fail closed. It does not lock both files into an atomic filesystem snapshot:
+a separate controlled publishing procedure must stage immutable inputs and
+recheck the exact bytes before any future authorized activation. Paths are
+resolved relative to the index's directory for this checker; the actual
+Zigbee2MQTT server/container must separately prove it resolves the file
+correctly from its data directory. No automatic OTA checks/scheduling are
+configured by this command. A PASS returns
+`LOCAL_INDEX_MATCH_SIGNATURE_UNVERIFIED`, with both
+`signature_verified=false` and `installation_authorized=false`.
+**Unsigned synthetic fixtures and a consistent hash do not authorize an
+OTA installation or publishing a local index.** Independently validated
+RSA-v2 signed firmware, a trusted signed base, CodeQL/CI and full hardware
+acceptance are still required.
+
+The registered Python test
+`test/Communication/Zigbee/test_local_ota_index.py` exercises local
+positive/negative index matching with the existing offline envelope
+inspector; no private keys, network connections or hardware are used.
+ The registered Python helper
 test `test/Communication/Zigbee/test_local_ota_image.py` covers malformed
 and valid *synthetic unsigned* fixtures, including a genuine round trip
 through the **unmodified official Espressif 2.0.5** image builder mirrored

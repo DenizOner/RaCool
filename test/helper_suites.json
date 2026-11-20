@@ -334,5 +334,9 @@
   {
     "file": "test/Communication/Zigbee/test_local_ota_image.py",
     "runner": "python"
+  },
+  {
+    "file": "test/Communication/Zigbee/test_local_ota_index.py",
+    "runner": "python"
   }
 ]
