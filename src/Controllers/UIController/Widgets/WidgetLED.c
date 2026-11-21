@@ -57,7 +57,7 @@ bool WidgetLED_FormatLabel(UIState state, const char *label,
         return true;
     case UI_STATE_SET_LED_ANIM:
         snprintf(outBuf, maxLen, "%s: %s", label,
-                 ExtAnimToStr(settings->hardware.ext_led_anim,catalog));
+                 ExtAnimToStr(settings->hardware.ext_led_startup_anim,catalog));
         return true;
     default:
         return false;
@@ -102,7 +102,7 @@ bool WidgetLED_GetValue(UIState state, SystemSettings *settings,
         return true;
     }
     case UI_STATE_SET_LED_ANIM: {
-        uint8_t anim = settings->hardware.ext_led_anim;
+        uint8_t anim = settings->hardware.ext_led_startup_anim;
         snprintf(valBuf, valLen, "%s", ExtAnimToStr(anim,catalog));
         unitBuf[0]='\0';
         size_t count;

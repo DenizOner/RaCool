@@ -36,7 +36,7 @@ static void PreviewSelectedAnimation(UIState state,const HardwareConfigs *hardwa
     esp_err_t result=ESP_ERR_INVALID_STATE;
     if (state==UI_STATE_SET_LED_ANIM) {
         IRGBLED *rgb=GetRGBLEDService();
-        if (rgb && rgb->PreviewAnimation) result=rgb->PreviewAnimation(rgb,(RGBLEDAnimType)hardware->ext_led_anim,LED_ANIMATION_PREVIEW_MS);
+        if (rgb && rgb->PreviewAnimation) result=rgb->PreviewAnimation(rgb,(RGBLEDAnimType)hardware->ext_led_startup_anim,LED_ANIMATION_PREVIEW_MS);
     } else {
         IBuiltinLED *led=(IBuiltinLED *)ServiceLocator_GetService(SVC_NAME_BUILTIN_LED);
         uint8_t type=state==UI_STATE_SET_BUILTIN_STARTUP ? hardware->builtin_led_startup_anim :
@@ -202,8 +202,8 @@ static void OnRGBLEDMenuAction(UIState state, int8_t direction, bool isButtonPre
             changed = true;
         }
         else if (state == UI_STATE_SET_LED_ANIM) {
-            settings->hardware.ext_led_anim = LEDAnimationCatalog_Next(
-                settings->hardware.ext_led_anim, false, direction);
+            settings->hardware.ext_led_startup_anim = LEDAnimationCatalog_Next(
+                settings->hardware.ext_led_startup_anim, false, direction);
             
             changed = true;
         }
@@ -318,6 +318,7 @@ static void OnRGBLEDMenuAction(UIState state, int8_t direction, bool isButtonPre
         APPEND_CHANGED(builtin_led_startup_anim);
         APPEND_CHANGED(builtin_led_connecting_anim);
         APPEND_CHANGED(builtin_led_fault_anim);
+        APPEND_CHANGED(ext_led_startup_anim);
         APPEND_CHANGED(ext_led_anim);
         APPEND_CHANGED(ext_led_color_cold_x);
         APPEND_CHANGED(ext_led_color_cold_y);

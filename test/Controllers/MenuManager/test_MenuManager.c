@@ -261,7 +261,7 @@ void test_MenuAnimationLabelsCoverBothCatalogsWithoutNullOrOutOfRangePercent(voi
       for(size_t index=0;index<count;++index) {
         char builtin[64],external[64],unit[16],label[128];int first=-1,second=-1;
         settings.hardware.builtin_led_idle_anim=entries[index].builtin_id;
-        settings.hardware.ext_led_anim=entries[index].external_id;
+        settings.hardware.ext_led_startup_anim=entries[index].external_id;
         TEST_ASSERT_TRUE(WidgetLED_GetValue(UI_STATE_SET_BUILTIN_IDLE,&settings,builtin,sizeof(builtin),unit,sizeof(unit),&first,catalog));
         TEST_ASSERT_TRUE(WidgetLED_GetValue(UI_STATE_SET_LED_ANIM,&settings,external,sizeof(external),unit,sizeof(unit),&second,catalog));
         TEST_ASSERT_EQUAL_STRING(expected[language][index],builtin);

@@ -16,6 +16,8 @@
 #include "Core/ServiceLocator/ServiceLocator.h"
 #include "Core/ServiceLocator/ServiceNames.h"
 #include "Communication/DebugConsole/IDebugConsole.h"
+#include "Management/ConfigurationManager/IConfigurationManager.h"
+#include "Management/ConfigurationManager/SystemConfigs.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,6 +100,14 @@ static int cmd_oled_handler(int argc, char **argv) {
         uint8_t c;
         if (argc != 3 || !parse_byte(argv[2], 255, &c)) { LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST_USAGE, "Usage: oled contrast <0-255>\n"); return 1; }
         if (!oled->SetContrast || oled->SetContrast(oled, c) != ESP_OK) { LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST_FAILED, "[OLED] Contrast failed\n"); return 1; }
+        /* Persist to NVS so the value survives reboot. */
+        {
+            IConfigurationManager *cfgMgr = ConfigurationManager_GetInstance();
+            if (cfgMgr && cfgMgr->UpdateFields) {
+                ConfigurationFieldUpdate field = {offsetof(HardwareConfigs, oled_contrast), &c, sizeof(c)};
+                cfgMgr->UpdateFields(cfgMgr, "hardware", &field, 1, true);
+            }
+        }
         LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST, "[OLED] Contrast set to %d\n", c);
         return 0;
     }
