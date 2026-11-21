@@ -501,11 +501,12 @@ void test_BootAnimation_RespectsSavedLEDPreference(void) {
   boot_state_result = ESP_OK;
   memset(&boot_rgb_state, 0, sizeof(boot_rgb_state));
   memset(&boot_settings, 0, sizeof(boot_settings));
-  boot_settings.hardware.ext_led_anim = RGBLED_ANIM_NONE;
+  boot_settings.hardware.ext_led_state = true;
+  boot_settings.hardware.ext_led_startup_anim = RGBLED_ANIM_NONE;
   BootAnimation_Start();
   BootAnimation_TryStartRGB();
   TEST_ASSERT_EQUAL(0, boot_calls);
-  boot_settings.hardware.ext_led_anim = RGBLED_ANIM_RAINBOW;
+  boot_settings.hardware.ext_led_startup_anim = RGBLED_ANIM_RAINBOW;
   BootAnimation_Start();
   TEST_ASSERT_EQUAL(1, boot_calls);
   TEST_ASSERT_EQUAL(RGBLED_ANIM_RAINBOW, boot_animation);

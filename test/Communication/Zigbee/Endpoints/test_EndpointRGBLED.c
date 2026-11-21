@@ -90,7 +90,7 @@ void test_EndpointRGBLED_HandleAction_OnOff(void) {
     bool handled = ep->HandleAction(ep, EZB_ZCL_CORE_SET_ATTR_VALUE_CB_ID, &msg, &status);
 
     TEST_ASSERT_TRUE(handled);
-    TEST_ASSERT_TRUE(mock_settings.hardware.rgb_red_state);
+    TEST_ASSERT_TRUE(mock_settings.hardware.ext_led_state);
 }
 
 void test_EndpointRGBLED_HandleAction_Level(void) {

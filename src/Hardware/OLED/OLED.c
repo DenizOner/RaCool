@@ -23,6 +23,7 @@
 #include "Core/EventBus/IEventBus.h"
 #include "Hardware/OLED/IOLED.h"
 #include "Hardware/OLED/OLEDConfig.h"
+#include "Management/ConfigurationManager/IConfigurationManager.h"
 #include "Management/Watchdog/WatchdogWorker.h"
 
 // Standard library
@@ -270,6 +271,7 @@ static esp_err_t OLED_SetContrast(IOLED *self, uint8_t contrast) {
     if (xSemaphoreTake(oledService.lvgl_mutex, pdMS_TO_TICKS(OLED_CONTROL_TIMEOUT_MS)) != pdTRUE) return ESP_ERR_TIMEOUT;
     esp_err_t result = oledService.io_handle ?
         OLED_Execute(OLED_ContrastCommand, &contrast) : ESP_ERR_INVALID_STATE;
+    if (result == ESP_OK) oledService.config.contrast = contrast;
     xSemaphoreGive(oledService.lvgl_mutex);
     return result;
 }
@@ -384,6 +386,15 @@ static int32_t OLED_Start(IService *self) {
     i2c_master_bus_handle_t bus = NULL;
     esp_err_t error = ESP_ERR_INVALID_STATE;
     if (!manager || !manager->AcquireBus || !manager->ReleaseBus || !manager->ExecuteExternal) goto failed;
+    /* Apply persisted contrast from NVS (overrides default). */
+    {
+        IConfigurationManager *cfgMgr = ConfigurationManager_GetInstance();
+        SystemSettings cfgSnap;
+        if (cfgMgr && cfgMgr->GetSnapshot &&
+            cfgMgr->GetSnapshot(cfgMgr, &cfgSnap) == ESP_OK) {
+            oledService.config.contrast = cfgSnap.hardware.oled_contrast;
+        }
+    }
     error = manager->AcquireBus(manager, &oledService, &bus);
     if (error != ESP_OK) goto failed;
     oledService.bus_manager = manager;

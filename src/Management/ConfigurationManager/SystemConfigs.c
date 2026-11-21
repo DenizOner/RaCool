@@ -117,10 +117,10 @@ esp_err_t SystemConfigs_Print(IConfigurationManager *configMgr) {
              (unsigned)s->hardware.builtin_led_connecting_anim,
              (unsigned)s->hardware.builtin_led_fault_anim);
     ESP_LOGI(TAG, "  Built-in Boot Anim: %u", (unsigned)s->hardware.builtin_led_startup_anim);
-    ESP_LOGI(TAG, "  RGB LED States: R:%s G:%s B:%s",
-             s->hardware.rgb_red_state   ? "1" : "0",
-             s->hardware.rgb_green_state ? "1" : "0",
-             s->hardware.rgb_blue_state  ? "1" : "0");
+    ESP_LOGI(TAG, "  External LED  : %s",
+             s->hardware.ext_led_state ? "ON" : "OFF");
+    ESP_LOGI(TAG, "  External Boot Anim: %u", (unsigned)s->hardware.ext_led_startup_anim);
+    ESP_LOGI(TAG, "  OLED Contrast : %u", (unsigned)s->hardware.oled_contrast);
     ESP_LOGI(TAG, "  RGB Brightness: %u", (unsigned)s->hardware.ext_led_brightness);
     ESP_LOGI(TAG, "  RGB Temp Zones: Cold:%.1f-%.1f Warm:%.1f-%.1f Hot:%.1f-%.1f Danger:%.1f Freeze:%.1f",
              s->hardware.ext_led_temp_cold_min, s->hardware.ext_led_temp_cold_max,

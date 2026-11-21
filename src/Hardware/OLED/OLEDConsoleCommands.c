@@ -16,6 +16,8 @@
 #include "Core/ServiceLocator/ServiceLocator.h"
 #include "Core/ServiceLocator/ServiceNames.h"
 #include "Communication/DebugConsole/IDebugConsole.h"
+#include "Management/ConfigurationManager/IConfigurationManager.h"
+#include "Management/ConfigurationManager/SystemConfigs.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,7 +99,23 @@ static int cmd_oled_handler(int argc, char **argv) {
     if (strcmp(argv[1], "contrast") == 0) {
         uint8_t c;
         if (argc != 3 || !parse_byte(argv[2], 255, &c)) { LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST_USAGE, "Usage: oled contrast <0-255>\n"); return 1; }
+        uint8_t previous = 127;
+        IConfigurationManager *cfgMgr = ConfigurationManager_GetInstance();
+        SystemSettings snapshot;
+        if (cfgMgr && cfgMgr->GetSnapshot && cfgMgr->GetSnapshot(cfgMgr, &snapshot) == ESP_OK) {
+            previous = snapshot.hardware.oled_contrast;
+        }
         if (!oled->SetContrast || oled->SetContrast(oled, c) != ESP_OK) { LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST_FAILED, "[OLED] Contrast failed\n"); return 1; }
+        /* Persist to NVS so the value survives reboot. */
+        if (cfgMgr && cfgMgr->UpdateFields) {
+            ConfigurationFieldUpdate field = {offsetof(HardwareConfigs, oled_contrast), &c, sizeof(c)};
+            esp_err_t err = cfgMgr->UpdateFields(cfgMgr, "hardware", &field, 1, true);
+            if (err != ESP_OK) {
+                oled->SetContrast(oled, previous);
+                LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST_FAILED, "[OLED] Contrast failed\n");
+                return 1;
+            }
+        }
         LOC_PRINTF(catalog, LOC_CLI_OLED_CONTRAST, "[OLED] Contrast set to %d\n", c);
         return 0;
     }
