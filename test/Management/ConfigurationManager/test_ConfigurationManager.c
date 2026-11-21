@@ -1867,9 +1867,7 @@ void test_ConfigBooleanFieldRejectsNoncanonicalStorageWithoutMutation(void) {
         {"control",offsetof(ControlConfigs,fan_manual_mode)},
         {"control",offsetof(ControlConfigs,fan_manual_state)},
         {"hardware",offsetof(HardwareConfigs,builtin_led_state)},
-        {"hardware",offsetof(HardwareConfigs,rgb_red_state)},
-        {"hardware",offsetof(HardwareConfigs,rgb_green_state)},
-        {"hardware",offsetof(HardwareConfigs,rgb_blue_state)}};
+        {"hardware",offsetof(HardwareConfigs,ext_led_state)}};
     for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);++i) {
         ConfigurationFieldUpdate field={fields[i].offset,&invalid,sizeof(invalid)};
         TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,mgr()->UpdateFields(mgr(),fields[i].block,&field,1,true));
@@ -2284,6 +2282,10 @@ void test_ConfigHardwareV7StartupMigrationPreservesEncoderAndRGB(void) {
     HardwareConfigs expected = migration_fixture;
     expected.version = HARDWARE_CONFIG_SCHEMA_VERSION;
     expected.builtin_led_startup_anim = DEFAULT_BUILTIN_LED_STARTUP_ANIM;
+    /* V8→V9: ext_led_anim is valid + non-NONE → copied to ext_led_startup_anim */
+    expected.ext_led_state = DEFAULT_EXT_LED_STATE;
+    expected.ext_led_startup_anim = RGBLED_ANIM_RAINBOW;
+    expected.oled_contrast = DEFAULT_OLED_CONTRAST;
     migration_size = sizeof(migration_fixture);
     mocked_nvs_open_fake.return_val = ESP_OK;
     mocked_nvs_get_blob_fake.custom_fake = load_migration_fixture;
@@ -2297,6 +2299,46 @@ void test_ConfigHardwareV7StartupMigrationPreservesEncoderAndRGB(void) {
     selection = 250;
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, mgr()->UpdateFields(mgr(), "hardware", &field, 1, true));
     TEST_ASSERT_EQUAL(255, mgr()->GetSettings(mgr())->hardware.builtin_led_startup_anim);
+    mgr()->GetSettings(mgr())->hardware = backup;
+}
+
+void test_ConfigHardwareV8MigrationSetsExtLedStateStartupAnimAndOledContrast(void) {
+    HardwareConfigs backup = mgr()->GetSettings(mgr())->hardware;
+    migration_fixture = backup;
+    migration_fixture.version = 8;
+    /* Pre-v9: ext_led_anim holds a valid animation that should migrate to ext_led_startup_anim. */
+    migration_fixture.ext_led_anim = RGBLED_ANIM_PULSE;
+    /* Bytes 6-8 may hold legacy rgb state values; they should be overwritten. */
+    migration_fixture.ext_led_state = false;
+    migration_fixture.ext_led_startup_anim = 0;
+    migration_fixture.oled_contrast = 0;
+    HardwareConfigs expected = migration_fixture;
+    expected.version = HARDWARE_CONFIG_SCHEMA_VERSION;
+    expected.ext_led_state = DEFAULT_EXT_LED_STATE;
+    expected.ext_led_startup_anim = RGBLED_ANIM_PULSE;  /* migrated from ext_led_anim */
+    expected.oled_contrast = DEFAULT_OLED_CONTRAST;
+    migration_size = sizeof(migration_fixture);
+    mocked_nvs_open_fake.return_val = ESP_OK;
+    mocked_nvs_get_blob_fake.custom_fake = load_migration_fixture;
+    TEST_ASSERT_EQUAL(ESP_OK, mgr()->Load(mgr(), "hardware"));
+    TEST_ASSERT_EQUAL_MEMORY(&expected, &mgr()->GetSettings(mgr())->hardware, sizeof(expected));
+    mocked_nvs_get_blob_fake.custom_fake = NULL;
+    /* ext_led_startup_anim must also validate through the animation catalog. */
+    uint8_t selection = 250; /* invalid non-catalog value */
+    ConfigurationFieldUpdate field = {offsetof(HardwareConfigs, ext_led_startup_anim), &selection, 1};
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, mgr()->UpdateFields(mgr(), "hardware", &field, 1, true));
+    /* NONE (0) is valid for startup anim. */
+    selection = RGBLED_ANIM_NONE;
+    TEST_ASSERT_EQUAL(ESP_OK, mgr()->UpdateFields(mgr(), "hardware", &field, 1, true));
+    TEST_ASSERT_EQUAL(RGBLED_ANIM_NONE, mgr()->GetSettings(mgr())->hardware.ext_led_startup_anim);
+    /* oled_contrast accepts full 0-255 range via field API. */
+    uint8_t contrast = 255;
+    ConfigurationFieldUpdate cfield = {offsetof(HardwareConfigs, oled_contrast), &contrast, sizeof(contrast)};
+    TEST_ASSERT_EQUAL(ESP_OK, mgr()->UpdateFields(mgr(), "hardware", &cfield, 1, true));
+    TEST_ASSERT_EQUAL(255, mgr()->GetSettings(mgr())->hardware.oled_contrast);
+    contrast = 0;
+    TEST_ASSERT_EQUAL(ESP_OK, mgr()->UpdateFields(mgr(), "hardware", &cfield, 1, true));
+    TEST_ASSERT_EQUAL(0, mgr()->GetSettings(mgr())->hardware.oled_contrast);
     mgr()->GetSettings(mgr())->hardware = backup;
 }
 
@@ -2511,6 +2553,7 @@ int main(void) {
     RUN_TEST(test_ConfigLocalizationFieldPersistenceLoadAndRemovedCatalogPreserveOtherBlocks);
     RUN_TEST(test_ConfigLocalizationMalformedCodeAndCommitFailureNeverApply);
     RUN_TEST(test_ConfigDefaultsReadIsPureAndDiffIncludesNewHardwareFields);
+    RUN_TEST(test_ConfigHardwareV8MigrationSetsExtLedStateStartupAnimAndOledContrast);
     RUN_TEST(test_ConfigShowIncludesCompleteSnapshotWithoutMutation);
     RUN_TEST(test_ConfigCheckedFieldsRejectStaleOwnerAndPreservePersistenceFailure);
     RUN_TEST(test_ConfigCheckedFieldsValidateExpectedPointersAndKeepUnrelatedChanges);

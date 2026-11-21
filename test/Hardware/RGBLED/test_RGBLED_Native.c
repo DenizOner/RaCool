@@ -114,6 +114,7 @@ void setUp(void) {
 
 void tearDown(void) {
     ResetAllMocks();
+    (void)RGBLEDHardware_Deinit();
 }
 
 // ---------------------------------------------------------------------------
@@ -385,13 +386,16 @@ static esp_err_t rgb_update_fields(IConfigurationManager *self, const char *bloc
     const ConfigurationFieldUpdate *fields, size_t count, bool persist) {
     (void)self; rgb_save_calls++;
     TEST_ASSERT_EQUAL_STRING("hardware", block);
-    TEST_ASSERT_EQUAL(1, count); TEST_ASSERT_TRUE(persist);
-    TEST_ASSERT_TRUE(fields[0].offset == offsetof(HardwareConfigs, ext_led_mode) ||
-                     fields[0].offset == offsetof(HardwareConfigs, ext_led_brightness));
-    TEST_ASSERT_EQUAL(1, fields[0].size);
-    if (rgb_save_result == ESP_OK) {
-        uint8_t *setting = (uint8_t *)&rgb_settings.hardware + fields[0].offset;
-        *setting = *(const uint8_t *)fields[0].data;
+    TEST_ASSERT_TRUE(persist);
+    for (size_t i = 0; i < count; i++) {
+        TEST_ASSERT_TRUE(fields[i].offset == offsetof(HardwareConfigs, ext_led_mode) ||
+                         fields[i].offset == offsetof(HardwareConfigs, ext_led_state) ||
+                         fields[i].offset == offsetof(HardwareConfigs, ext_led_brightness));
+        TEST_ASSERT_EQUAL(1, fields[i].size);
+        if (rgb_save_result == ESP_OK) {
+            uint8_t *setting = (uint8_t *)&rgb_settings.hardware + fields[i].offset;
+            *setting = *(const uint8_t *)fields[i].data;
+        }
     }
     return rgb_save_result;
 }
@@ -402,7 +406,9 @@ static IService *rgb_config_locator(const char *name) {
 static void setup_rgb_settings(void) {
     memset(&rgb_settings, 0, sizeof(rgb_settings));
     rgb_settings.system.system_enabled = true;
+    rgb_settings.hardware.ext_led_state = true;
     rgb_settings.hardware.ext_led_brightness = 123;
+    rgb_settings.hardware.ext_led_startup_anim = RGBLED_ANIM_RAINBOW;
     rgb_snapshot_result = rgb_save_result = ESP_OK; rgb_save_calls = 0;
     mocked_ServiceLocator_GetService_fake.custom_fake = rgb_config_locator;
     s_mockBootAnimationIsRunning = false;
@@ -417,7 +423,7 @@ void test_RGBLED_BootRespectsGlobalGateAndConfiguredSelection(void) {
     setup_rgb_settings();
     s_mockBootAnimationIsRunning = true;
     rgb_settings.hardware.ext_led_mode = EXT_LED_MODE_OFF;
-    rgb_settings.hardware.ext_led_anim = RGBLED_ANIM_RAINBOW;
+    rgb_settings.hardware.ext_led_startup_anim = RGBLED_ANIM_RAINBOW;
     mocked_xQueueSend_fake.custom_fake = capture_startup_command;
     IRGBLED *service = GetRGBLEDService();
     TEST_ASSERT_EQUAL(0, service->base.Start(&service->base));
@@ -431,11 +437,11 @@ void test_RGBLED_BootRespectsGlobalGateAndConfiguredSelection(void) {
     TEST_ASSERT_FALSE(instance.state.isOn);
     TEST_ASSERT_FALSE(RGBLEDAnimEngine_IsActive());
     rgb_settings.system.system_enabled = true;
-    rgb_settings.hardware.ext_led_anim = RGBLED_ANIM_NONE;
+    rgb_settings.hardware.ext_led_startup_anim = RGBLED_ANIM_NONE;
     HandleCommand(startup_command);
     TEST_ASSERT_FALSE(instance.state.isOn);
     TEST_ASSERT_FALSE(RGBLEDAnimEngine_IsActive());
-    rgb_settings.hardware.ext_led_anim = RGBLED_ANIM_PULSE;
+    rgb_settings.hardware.ext_led_startup_anim = RGBLED_ANIM_PULSE;
     HandleCommand(startup_command);
     TEST_ASSERT_TRUE(instance.state.isOn);
     TEST_ASSERT_EQUAL(RGBLED_ANIM_PULSE, RGBLEDAnimEngine_GetCurrentType());
@@ -455,7 +461,7 @@ void test_RGBLED_AllBootEffectsRenderFromAnUninitializedBlackColor(void) {
         TEST_ASSERT_EQUAL(ESP_OK, RGBLEDAnimEngine_Stop());
         instance.state.currentColor = (RGBColor){0, 0, 0};
         instance.settingsApplied = false;
-        rgb_settings.hardware.ext_led_anim = type;
+        rgb_settings.hardware.ext_led_startup_anim = type;
         HandleCommand(startup_command);
         TEST_ASSERT_TRUE(instance.state.isOn);
         TEST_ASSERT_EQUAL(type, RGBLEDAnimEngine_GetCurrentType());
@@ -685,7 +691,12 @@ void test_RGBLED_ModePersistenceRejectsInvalidOrFailedWrites(void) {
     rgb_save_result = ESP_OK;
     TEST_ASSERT_EQUAL(0, cmd_rgbled_mode(2, argv));
     TEST_ASSERT_EQUAL(2, rgb_settings.hardware.ext_led_mode);
+    TEST_ASSERT_FALSE(rgb_settings.hardware.ext_led_state);
     TEST_ASSERT_TRUE(startup_command.payload.force_mode);
+    char *argv_anim[] = {"rgbled_mode", "1"};
+    TEST_ASSERT_EQUAL(0, cmd_rgbled_mode(2, argv_anim));
+    TEST_ASSERT_EQUAL(1, rgb_settings.hardware.ext_led_mode);
+    TEST_ASSERT_TRUE(rgb_settings.hardware.ext_led_state);
     TEST_ASSERT_EQUAL(ESP_OK, service->base.Stop(&service->base));
 }
 
@@ -908,6 +919,13 @@ void test_RGBLED_BrightnessPreviewPreservesOwnerAndExpires(void) {
     rgb_settings.hardware.ext_led_mode=EXT_LED_MODE_OFF;ApplySettings();
     HandleCommand((RGBLEDCommand){.type=RGBLED_CMD_PREVIEW_BRIGHTNESS,.payload.brightness_preview={200,500}});
     TEST_ASSERT_FALSE(instance.previewActive);
+    /* Also verify that ext_led_state == false gates previews even if mode is not OFF */
+    rgb_settings.hardware.ext_led_mode=EXT_LED_MODE_TEMPERATURE;
+    rgb_settings.hardware.ext_led_state=false;
+    ApplySettings();
+    HandleCommand((RGBLEDCommand){.type=RGBLED_CMD_PREVIEW_BRIGHTNESS,.payload.brightness_preview={200,500}});
+    TEST_ASSERT_FALSE(instance.previewActive);
+    rgb_settings.hardware.ext_led_state=true;
     rgb_settings.hardware.ext_led_mode=EXT_LED_MODE_TEMPERATURE;ApplySettings();
     HandleCommand((RGBLEDCommand){.type=RGBLED_CMD_SET_ANIMATION,.payload.animation={RGBLED_ANIM_ALERT,RGBLED_PRIO_CRITICAL,1000}});
     HandleCommand((RGBLEDCommand){.type=RGBLED_CMD_PREVIEW_BRIGHTNESS,.payload.brightness_preview={200,500}});

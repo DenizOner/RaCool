@@ -30,9 +30,9 @@
     FIELD(hardware,builtin_led_idle_anim) \
     FIELD(hardware,builtin_led_connecting_anim) \
     FIELD(hardware,builtin_led_fault_anim) \
-    FIELD(hardware,rgb_red_state) \
-    FIELD(hardware,rgb_green_state) \
-    FIELD(hardware,rgb_blue_state) \
+    FIELD(hardware,ext_led_state) \
+    FIELD(hardware,ext_led_startup_anim) \
+    FIELD(hardware,oled_contrast) \
     FIELD(hardware,ext_led_brightness) \
     FIELD(hardware,ext_led_temp_cold_min) \
     FIELD(hardware,ext_led_temp_cold_max) \

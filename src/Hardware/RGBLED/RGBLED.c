@@ -70,6 +70,7 @@ typedef struct {
     uint8_t appliedAnimation;
     uint8_t appliedBrightness;
     bool appliedSystemEnabled;
+    bool appliedState;
     atomic_bool settingsRefreshPending;
 } RGBLEDServiceImpl;
 
@@ -107,7 +108,7 @@ static void RenderFrame(uint32_t now_ms) {
     instance.state.targetColor = (RGBColor){instance.targetFrame.r,instance.targetFrame.g,instance.targetFrame.b};
     instance.state.isFading = instance.transition.active;
     if (instance.previewActive) {
-        bool allowed=instance.settingsApplied && instance.appliedSystemEnabled && instance.appliedMode!=EXT_LED_MODE_OFF &&
+        bool allowed=instance.settingsApplied && instance.appliedSystemEnabled && instance.appliedState && instance.appliedMode!=EXT_LED_MODE_OFF &&
             !(RGBLEDAnimEngine_IsActive() && instance.state.animPriority>=RGBLED_PRIO_HIGH);
         if (!allowed || (uint32_t)(now_ms-instance.previewStartMs)>=instance.previewDurationMs) {
             instance.previewActive=false;
@@ -441,7 +442,7 @@ static void RGBLEDTask(void *pvParameters) {
 static void HandleCommand(RGBLEDCommand cmd) {
     bool state_changed = false;
     bool gate_enabled = !instance.settingsApplied ||
-        (instance.appliedSystemEnabled && instance.appliedMode != EXT_LED_MODE_OFF);
+        (instance.appliedSystemEnabled && instance.appliedState && instance.appliedMode != EXT_LED_MODE_OFF);
 
     if (cmd.type!=RGBLED_CMD_PREVIEW_COLOR && cmd.type!=RGBLED_CMD_PREVIEW_ANIMATION && cmd.type!=RGBLED_CMD_PREVIEW_BRIGHTNESS && cmd.type!=RGBLED_CMD_UPDATE_TEMPERATURE &&
         cmd.type!=RGBLED_CMD_SET_BRIGHTNESS && cmd.type!=RGBLED_CMD_APPLY_SETTINGS)
@@ -958,11 +959,13 @@ static int cmd_rgbled_mode(int argc, char **argv) {
         return -1;
     }
     uint8_t mode = (uint8_t)(argv[1][0] - '0');
+    bool state = (mode != EXT_LED_MODE_OFF);
     IConfigurationManager *config = (IConfigurationManager *)ServiceLocator_GetService(SVC_NAME_CONFIGURATION_MANAGER);
-    ConfigurationFieldUpdate update = {
-        .offset = offsetof(HardwareConfigs, ext_led_mode), .data = &mode, .size = sizeof(mode)
+    ConfigurationFieldUpdate updates[2] = {
+        {.offset = offsetof(HardwareConfigs, ext_led_mode), .data = &mode, .size = sizeof(mode)},
+        {.offset = offsetof(HardwareConfigs, ext_led_state), .data = &state, .size = sizeof(state)},
     };
-    if (!config || !config->UpdateFields || config->UpdateFields(config, "hardware", &update, 1, true) != ESP_OK) {
+    if (!config || !config->UpdateFields || config->UpdateFields(config, "hardware", updates, 2, true) != ESP_OK) {
         LOC_PRINTF(catalog, LOC_CLI_RGB_RGBLED_MODE_PERSISTENCE_FAILED, "RGBLED mode persistence failed.\n");
         return -1;
     }
@@ -1010,9 +1013,10 @@ static int cmd_rgbled_anim(int argc, char **argv) {
 
 static void RecordSettings(const SystemSettings *settings) {
     instance.appliedMode = settings->hardware.ext_led_mode;
-    instance.appliedAnimation = settings->hardware.ext_led_anim;
+    instance.appliedAnimation = BootAnimation_IsRunning() ? settings->hardware.ext_led_startup_anim : settings->hardware.ext_led_anim;
     instance.appliedBrightness = settings->hardware.ext_led_brightness;
     instance.appliedSystemEnabled = settings->system.system_enabled;
+    instance.appliedState = settings->hardware.ext_led_state;
     instance.settingsApplied = true;
 }
 
@@ -1035,8 +1039,9 @@ static void ApplySettings(void) {
 
     bool selection_changed = !instance.settingsApplied ||
         instance.appliedMode != settings->hardware.ext_led_mode ||
+        instance.appliedState != settings->hardware.ext_led_state ||
         ((settings->hardware.ext_led_mode == EXT_LED_MODE_ANIMATION || BootAnimation_IsRunning()) &&
-         instance.appliedAnimation != settings->hardware.ext_led_anim) ||
+         instance.appliedAnimation != (BootAnimation_IsRunning() ? settings->hardware.ext_led_startup_anim : settings->hardware.ext_led_anim)) ||
         instance.appliedSystemEnabled != settings->system.system_enabled;
     bool brightness_changed = !instance.settingsApplied ||
         instance.appliedBrightness != settings->hardware.ext_led_brightness;
@@ -1059,9 +1064,9 @@ static void ApplySettings(void) {
 
     // During the splash, honor the configured boot animation and enable state.
     // Never allow background settings or temperature mode to preempt it while the boot screen is active.
-    if (BootAnimation_IsRunning() && settings->hardware.ext_led_anim != RGBLED_ANIM_NONE &&
-        settings->hardware.ext_led_mode != EXT_LED_MODE_OFF && settings->system.system_enabled) {
-        RGBLEDAnimType bootAnim = (RGBLEDAnimType)settings->hardware.ext_led_anim;
+    if (BootAnimation_IsRunning() && settings->hardware.ext_led_startup_anim != RGBLED_ANIM_NONE &&
+        settings->hardware.ext_led_mode != EXT_LED_MODE_OFF && settings->hardware.ext_led_state && settings->system.system_enabled) {
+        RGBLEDAnimType bootAnim = (RGBLEDAnimType)settings->hardware.ext_led_startup_anim;
         
         if (!RGBLEDAnimEngine_IsActive() || instance.state.activeAnim != bootAnim) {
             if (StartEngine(bootAnim, instance.state.currentColor, RGBLED_PRIO_HIGH, 0) != ESP_OK) return;
@@ -1075,7 +1080,7 @@ static void ApplySettings(void) {
     }
 
     // Apply mode
-    if (!settings->system.system_enabled || settings->hardware.ext_led_mode == EXT_LED_MODE_OFF) {
+    if (!settings->system.system_enabled || settings->hardware.ext_led_mode == EXT_LED_MODE_OFF || !settings->hardware.ext_led_state) {
         instance.state.colorMode = RGBLED_COLOR_MODE_RGB;
         instance.state.isOn = false;
         instance.state.activeAnim = RGBLED_ANIM_NONE;
