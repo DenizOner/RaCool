@@ -331,6 +331,11 @@ static bool RGBLED_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callb
             size_t offset = mode ? offsetof(HardwareConfigs, ext_led_mode) : animation ?
                             offsetof(HardwareConfigs, ext_led_startup_anim) : offsetof(HardwareConfigs, ext_led_brightness);
             fields[0] = (ConfigurationFieldUpdate){offset, &value, sizeof(value)};
+            if (mode) {
+                enabled = (value != EXT_LED_MODE_OFF);
+                fields[1] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, ext_led_state), &enabled, sizeof(enabled)};
+                count = 2;
+            }
         }
     }
     /* ConfigurationManager validates and commits before publishing the worker update. */

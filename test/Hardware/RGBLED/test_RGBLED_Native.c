@@ -386,13 +386,16 @@ static esp_err_t rgb_update_fields(IConfigurationManager *self, const char *bloc
     const ConfigurationFieldUpdate *fields, size_t count, bool persist) {
     (void)self; rgb_save_calls++;
     TEST_ASSERT_EQUAL_STRING("hardware", block);
-    TEST_ASSERT_EQUAL(1, count); TEST_ASSERT_TRUE(persist);
-    TEST_ASSERT_TRUE(fields[0].offset == offsetof(HardwareConfigs, ext_led_mode) ||
-                     fields[0].offset == offsetof(HardwareConfigs, ext_led_brightness));
-    TEST_ASSERT_EQUAL(1, fields[0].size);
-    if (rgb_save_result == ESP_OK) {
-        uint8_t *setting = (uint8_t *)&rgb_settings.hardware + fields[0].offset;
-        *setting = *(const uint8_t *)fields[0].data;
+    TEST_ASSERT_TRUE(persist);
+    for (size_t i = 0; i < count; i++) {
+        TEST_ASSERT_TRUE(fields[i].offset == offsetof(HardwareConfigs, ext_led_mode) ||
+                         fields[i].offset == offsetof(HardwareConfigs, ext_led_state) ||
+                         fields[i].offset == offsetof(HardwareConfigs, ext_led_brightness));
+        TEST_ASSERT_EQUAL(1, fields[i].size);
+        if (rgb_save_result == ESP_OK) {
+            uint8_t *setting = (uint8_t *)&rgb_settings.hardware + fields[i].offset;
+            *setting = *(const uint8_t *)fields[i].data;
+        }
     }
     return rgb_save_result;
 }
@@ -688,7 +691,12 @@ void test_RGBLED_ModePersistenceRejectsInvalidOrFailedWrites(void) {
     rgb_save_result = ESP_OK;
     TEST_ASSERT_EQUAL(0, cmd_rgbled_mode(2, argv));
     TEST_ASSERT_EQUAL(2, rgb_settings.hardware.ext_led_mode);
+    TEST_ASSERT_FALSE(rgb_settings.hardware.ext_led_state);
     TEST_ASSERT_TRUE(startup_command.payload.force_mode);
+    char *argv_anim[] = {"rgbled_mode", "1"};
+    TEST_ASSERT_EQUAL(0, cmd_rgbled_mode(2, argv_anim));
+    TEST_ASSERT_EQUAL(1, rgb_settings.hardware.ext_led_mode);
+    TEST_ASSERT_TRUE(rgb_settings.hardware.ext_led_state);
     TEST_ASSERT_EQUAL(ESP_OK, service->base.Stop(&service->base));
 }
 

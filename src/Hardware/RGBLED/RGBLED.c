@@ -959,11 +959,13 @@ static int cmd_rgbled_mode(int argc, char **argv) {
         return -1;
     }
     uint8_t mode = (uint8_t)(argv[1][0] - '0');
+    bool state = (mode != EXT_LED_MODE_OFF);
     IConfigurationManager *config = (IConfigurationManager *)ServiceLocator_GetService(SVC_NAME_CONFIGURATION_MANAGER);
-    ConfigurationFieldUpdate update = {
-        .offset = offsetof(HardwareConfigs, ext_led_mode), .data = &mode, .size = sizeof(mode)
+    ConfigurationFieldUpdate updates[2] = {
+        {.offset = offsetof(HardwareConfigs, ext_led_mode), .data = &mode, .size = sizeof(mode)},
+        {.offset = offsetof(HardwareConfigs, ext_led_state), .data = &state, .size = sizeof(state)},
     };
-    if (!config || !config->UpdateFields || config->UpdateFields(config, "hardware", &update, 1, true) != ESP_OK) {
+    if (!config || !config->UpdateFields || config->UpdateFields(config, "hardware", updates, 2, true) != ESP_OK) {
         LOC_PRINTF(catalog, LOC_CLI_RGB_RGBLED_MODE_PERSISTENCE_FAILED, "RGBLED mode persistence failed.\n");
         return -1;
     }

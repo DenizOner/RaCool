@@ -178,6 +178,7 @@ static void OnRGBLEDMenuAction(UIState state, int8_t direction, bool isButtonPre
             next %= EXT_LED_MODE_COUNT;
             if (next < 0) next += EXT_LED_MODE_COUNT;
             settings->hardware.ext_led_mode = (uint8_t)next;
+            settings->hardware.ext_led_state = (settings->hardware.ext_led_mode != EXT_LED_MODE_OFF);
             changed = true;
         } 
         else if (state == UI_STATE_SET_BUILTIN_STARTUP) {
@@ -314,6 +315,7 @@ static void OnRGBLEDMenuAction(UIState state, int8_t direction, bool isButtonPre
     } \
 } while (0)
         APPEND_CHANGED(ext_led_mode);
+        APPEND_CHANGED(ext_led_state);
         APPEND_CHANGED(builtin_led_idle_anim);
         APPEND_CHANGED(builtin_led_startup_anim);
         APPEND_CHANGED(builtin_led_connecting_anim);

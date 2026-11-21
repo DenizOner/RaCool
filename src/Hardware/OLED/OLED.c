@@ -386,6 +386,15 @@ static int32_t OLED_Start(IService *self) {
     i2c_master_bus_handle_t bus = NULL;
     esp_err_t error = ESP_ERR_INVALID_STATE;
     if (!manager || !manager->AcquireBus || !manager->ReleaseBus || !manager->ExecuteExternal) goto failed;
+    /* Apply persisted contrast from NVS (overrides default). */
+    {
+        IConfigurationManager *cfgMgr = ConfigurationManager_GetInstance();
+        SystemSettings cfgSnap;
+        if (cfgMgr && cfgMgr->GetSnapshot &&
+            cfgMgr->GetSnapshot(cfgMgr, &cfgSnap) == ESP_OK) {
+            oledService.config.contrast = cfgSnap.hardware.oled_contrast;
+        }
+    }
     error = manager->AcquireBus(manager, &oledService, &bus);
     if (error != ESP_OK) goto failed;
     oledService.bus_manager = manager;
@@ -425,17 +434,6 @@ static int32_t OLED_Start(IService *self) {
         goto failed;
     }
     oledService.state = SERVICE_STATE_STARTED;
-    /* Apply persisted contrast from NVS (overrides OLEDConfig default). */
-    {
-        IConfigurationManager *cfgMgr = ConfigurationManager_GetInstance();
-        SystemSettings cfgSnap;
-        if (cfgMgr && cfgMgr->GetSnapshot &&
-            cfgMgr->GetSnapshot(cfgMgr, &cfgSnap) == ESP_OK) {
-            oledService.config.contrast = cfgSnap.hardware.oled_contrast;
-            esp_lcd_panel_io_tx_param(oledService.io_handle, 0x81,
-                                      &oledService.config.contrast, 1);
-        }
-    }
     xSemaphoreGive(oledService.lvgl_mutex);
     if (!oledService.console_registered) {
         IDebugConsole *console = (IDebugConsole *)ServiceLocator_GetService(SVC_NAME_DEBUG_CONSOLE);
