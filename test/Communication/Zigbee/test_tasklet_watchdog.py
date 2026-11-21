@@ -41,8 +41,9 @@ TP      : 0x40820930  T0      : 0x40022494  T1      : 0x9a400000  T2      : 0x32
 S0/FP   : 0xfffffffd  S1      : 0x4083665c  A0      : 0x4083665c  A1      : 0x00000000
 A2      : 0x00000000  A3      : 0x00000005  A4      : 0x40836660  A5      : 0x00000000
 """
-SYMBOLS_REAL = """4210c800 00000080 T tasklet_sched_process
-40836630 00000300 b s_nwk_fwd
+# Sized nm symbols from the SHA-256-matched original firmware ELF (Issue #2).
+SYMBOLS_REAL = """4210c7e0 0000004c T tasklet_sched_process
+40836630 0000030c b s_nwk_fwd
 """
 DISASM_REAL = """    4210c806: 4104 lw s1,0(a0)
     4210c808: 00450713 addi a4,a0,4
@@ -50,7 +51,7 @@ DISASM_REAL = """    4210c806: 4104 lw s1,0(a0)
     4210c810: 431c lw a5,0(a4)
     4210c812: 0230000f fence r,rw
     4210c816: 8b85 andi a5,a5,1
-    4210c818: eb81 bnez a5,4210c822
+    4210c818: eb81 bnez a5,4210c828
     4210c81a: 668727af amoand.w.aqrl a5,s0,(a4)
     4210c81e: 8b89 andi a5,a5,2
 """
@@ -155,6 +156,44 @@ class TaskletWatchdogTests(unittest.TestCase):
                     with self.assertRaises(ValueError) as ctx:
                         module.analyze(log, SYMBOLS, altered_asm)
                     self.assertIn("Unrecognized scheduler instruction sequence", str(ctx.exception))
+
+    def test_accepts_disassembly_branch_symbol_annotation(self):
+        annotated = DISASM_REAL.replace(
+            "bnez a5,4210c828",
+            "bnez a5,4210c828 <tasklet_sched_process+0x48>")
+        for log in (LOG_REAL_816,
+                    LOG_REAL_816.replace("0x4210c816", "0x4210c81e")):
+            with self.subTest(mepc=log.split("MEPC")[1].split()[1]):
+                result = module.analyze(log, SYMBOLS_REAL, annotated)
+                self.assertEqual(result["nwk_fwd_offset"], "0x2c")
+
+    def test_rejects_tampered_branch_target_in_both_layouts(self):
+        fixtures = [
+            (LOG, SYMBOLS, DISASM, "bnez a5,1022"),
+            (LOG_816_SYNTH, SYMBOLS, DISASM, "bnez a5,1022"),
+            (LOG_REAL_816, SYMBOLS_REAL, DISASM_REAL, "bnez a5,4210c828"),
+            (LOG_REAL_816.replace("0x4210c816", "0x4210c81e"),
+             SYMBOLS_REAL, DISASM_REAL, "bnez a5,4210c828"),
+        ]
+        for log, symbols, disasm, original_branch in fixtures:
+            for wrong_target in ("0", "1000", "4210c822", "nothex"):
+                with self.subTest(mepc=log.split("MEPC")[1].split()[1],
+                                  wrong_target=wrong_target):
+                    tampered = disasm.replace(
+                        original_branch, "bnez a5," + wrong_target)
+                    with self.assertRaisesRegex(
+                            ValueError, "Unrecognized scheduler instruction sequence"):
+                        module.analyze(log, symbols, tampered)
+
+    def test_rejects_bad_branch_annotation_and_wrong_annotated_target(self):
+        for replacement in ("bnez a5,4210c822 <tasklet_sched_process+0x48>",
+                            "bnez a5,4210c828 <corrupt",
+                            "bnez a5,4210c828 junk"):
+            with self.subTest(replacement=replacement):
+                tampered = DISASM_REAL.replace("bnez a5,4210c828", replacement)
+                with self.assertRaisesRegex(
+                        ValueError, "Unrecognized scheduler instruction sequence"):
+                    module.analyze(LOG_REAL_816, SYMBOLS_REAL, tampered)
 
     def test_rejects_wrong_dump_or_changed_instructions(self):
         for log, asm in [(LOG.replace("Zigbee_main", "other"), DISASM),

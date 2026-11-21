@@ -70,8 +70,17 @@ def analyze(log, symbols, disassembly):
     ]
     matched = False
     for layout in supported_layouts:
-        if all(instructions.get(pc + offset) == inst for offset, inst in layout["expected"].items()) and \
-           instructions.get(pc + layout["bnez_offset"], "").startswith("bneza5,"):
+        if not all(instructions.get(pc + offset) == inst
+                   for offset, inst in layout["expected"].items()):
+            continue
+
+        # The branch must skip to the next-node step, not just use the right opcode.
+        # Offset +0x22 is the known 'mv a0, s1' instruction in this SDK layout.
+        sequence_start = pc + min(layout["expected"])
+        branch = instructions.get(pc + layout["bnez_offset"], "")
+        branch_match = re.fullmatch(
+            r"bneza5,(?:0x)?([0-9a-fA-F]+)(?:<[^>]+>)?", branch)
+        if branch_match and int(branch_match.group(1), 16) == sequence_start + 0x22:
             matched = True
             break
     if not matched:
