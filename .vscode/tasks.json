@@ -1,0 +1,113 @@
+{
+    // VS Code tasks for RaCool — thin wrappers around canonical repo commands.
+    // All commands are defined in AGENTS.md and test/README.md.
+    // Hardware-mutating operations (flash, NVS reset, serial port, relay) are
+    // intentionally excluded; use the documented CLI commands directly.
+    "version": "2.0.0",
+    "tasks": [
+        // ── Test layout & inventory ──────────────────────────────────────────
+        {
+            "label": "Check: Test Layout",
+            "type": "shell",
+            "command": "node",
+            "args": ["test/check_test_layout.mjs"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Check: Test Inventory",
+            "type": "shell",
+            "command": "node",
+            "args": ["test/check_test_inventory.mjs"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        // ── Host native tests ────────────────────────────────────────────────
+        {
+            "label": "Test: Run Native Suites",
+            "type": "shell",
+            "command": "node",
+            "args": ["test/run_native_tests.mjs"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": {"kind": "test", "isDefault": true},
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        // ── Helper suites (Python + PowerShell) ──────────────────────────────
+        {
+            "label": "Test: Run Helper Suites",
+            "type": "shell",
+            "command": "node",
+            "args": ["test/run_helper_tests.mjs"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        // ── All checks in sequence ───────────────────────────────────────────
+        {
+            "label": "Test: All (layout + inventory + native + helpers)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Check: Test Layout",
+                "Check: Test Inventory",
+                "Test: Run Native Suites",
+                "Test: Run Helper Suites"
+            ],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        // ── Firmware build (production) ──────────────────────────────────────
+        // Requires PlatformIO IDE extension. Does NOT flash to device.
+        {
+            "label": "Build: Production Firmware (esp32-c6-devkitc-1)",
+            "type": "shell",
+            "command": "pio",
+            "args": ["run", "-e", "esp32-c6-devkitc-1"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": {"kind": "build", "isDefault": true},
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "platformio",
+                "fileLocation": "absolute",
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        }
+    ]
+}

@@ -85,3 +85,10 @@ sdkconfig.*
 **/*.log
 .DS_Store
 Thumbs.db
+
+# -----------------------------------------------------------------------------
+# 9. Temporary Observation & Test Outputs
+# Keep one-off diagnostics and manual test captures out of version control.
+# Never commit device readings, session outputs, or scratch data here.
+# -----------------------------------------------------------------------------
+/.temporary/
