@@ -36,11 +36,45 @@ def analyze(log, symbols, disassembly):
         if match:
             instructions[int(match.group(1), 16)] = re.sub(r"\s+", "", match.group(2))
     pc = registers["MEPC"]
-    # Recognize only the observed layout; SDK changes must not create a false inference.
-    expected = {0: "andia5,a5,2", -24: "lws1,0(a0)", -22: "addia4,a0,4",
-                -18: "fencerw,rw", -14: "lwa5,0(a4)", -12: "fencer,rw",
-                -8: "andia5,a5,1", -4: "amoand.w.aqrla5,s0,(a4)"}
-    if any(instructions.get(pc + offset) != instruction for offset, instruction in expected.items()) or not instructions.get(pc - 6, "").startswith("bneza5,"):
+    # Recognize only the supported instruction layouts for known watchdog MEPC positions;
+    # SDK changes must not create a false inference.
+    supported_layouts = [
+        # MEPC at `andi a5, a5, 2` (e.g. 0x4210c81e, offset +24 from sequence start)
+        {
+            "expected": {
+                0: "andia5,a5,2",
+                -24: "lws1,0(a0)",
+                -22: "addia4,a0,4",
+                -18: "fencerw,rw",
+                -14: "lwa5,0(a4)",
+                -12: "fencer,rw",
+                -8: "andia5,a5,1",
+                -4: "amoand.w.aqrla5,s0,(a4)",
+            },
+            "bnez_offset": -6,
+        },
+        # MEPC at `andi a5, a5, 1` (e.g. 0x4210c816, offset +16 from sequence start)
+        {
+            "expected": {
+                0: "andia5,a5,1",
+                -16: "lws1,0(a0)",
+                -14: "addia4,a0,4",
+                -10: "fencerw,rw",
+                -6: "lwa5,0(a4)",
+                -4: "fencer,rw",
+                4: "amoand.w.aqrla5,s0,(a4)",
+                8: "andia5,a5,2",
+            },
+            "bnez_offset": 2,
+        },
+    ]
+    matched = False
+    for layout in supported_layouts:
+        if all(instructions.get(pc + offset) == inst for offset, inst in layout["expected"].items()) and \
+           instructions.get(pc + layout["bnez_offset"], "").startswith("bneza5,"):
+            matched = True
+            break
+    if not matched:
         raise ValueError("Unrecognized scheduler instruction sequence")
     pointer = registers["A0"]
     base, length = ranges["s_nwk_fwd"]
