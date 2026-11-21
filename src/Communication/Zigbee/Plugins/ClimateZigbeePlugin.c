@@ -213,10 +213,13 @@ static void OnConfigChanged(BusEvent event) {
                                EZB_ZCL_ATTR_ON_OFF_ON_OFF_ID, &enabled, sizeof(enabled));
 
     // 5. RGB LED operating mode and animation sync to HA
+    bool rgb_on = settings->hardware.ext_led_state && settings->hardware.ext_led_mode != EXT_LED_MODE_OFF;
+    QueueAttribute(zb, ZIGBEE_EP_RGB_LED, EZB_ZCL_CLUSTER_ID_ON_OFF,
+                               EZB_ZCL_ATTR_ON_OFF_ON_OFF_ID, &rgb_on, sizeof(rgb_on));
     QueueAttribute(zb, ZIGBEE_EP_RGB_LED, EZB_ZCL_CLUSTER_ID_ON_OFF, 0x8013,
                                &settings->hardware.ext_led_mode, sizeof(uint8_t));
     QueueAttribute(zb, ZIGBEE_EP_RGB_LED, EZB_ZCL_CLUSTER_ID_ON_OFF, 0x8014,
-                               &settings->hardware.ext_led_anim, sizeof(uint8_t));
+                               &settings->hardware.ext_led_startup_anim, sizeof(uint8_t));
     /* CurrentLevel reserves 255; full hardware brightness maps to ZCL 254. */
     uint8_t externalLevel = settings->hardware.ext_led_brightness == 255 ? 254 : settings->hardware.ext_led_brightness;
     QueueAttribute(zb, ZIGBEE_EP_RGB_LED, EZB_ZCL_CLUSTER_ID_LEVEL,

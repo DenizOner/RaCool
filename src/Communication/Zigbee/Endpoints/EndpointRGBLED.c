@@ -24,7 +24,7 @@ typedef struct {
     uint8_t saturation;
     uint8_t color_mode;
     uint8_t ext_led_mode;    /**< LED operating mode (EXT_LED_MODE_*). */
-    uint8_t ext_led_anim;    /**< Animation index (for animation mode). */
+    uint8_t ext_led_startup_anim; /**< Startup animation index. */
     uint32_t zone_xy[RGB_ZONE_COUNT];
     int16_t temp_cold_min;
     int16_t temp_cold_max;
@@ -50,13 +50,13 @@ static esp_err_t RGBLED_RegisterClusters(IZigbeeEndpoint *self, ezb_af_device_de
     if (!config || !config->GetSnapshot || config->GetSnapshot(config, &snapshot) != ESP_OK) return ESP_FAIL;
     const SystemSettings *settings = &snapshot;
 
-    ep->on_off_state = false;
+    ep->on_off_state = settings->hardware.ext_led_state && settings->hardware.ext_led_mode != EXT_LED_MODE_OFF;
     ep->brightness = settings->hardware.ext_led_brightness;
     ep->hue = 0;
     ep->saturation = 0;
     ep->color_mode = 0;
     ep->ext_led_mode = settings->hardware.ext_led_mode;
-    ep->ext_led_anim = settings->hardware.ext_led_anim;
+    ep->ext_led_startup_anim = settings->hardware.ext_led_startup_anim;
     ep->temp_cold_min = (int16_t)lroundf(settings->hardware.ext_led_temp_cold_min * 100.0f);
     ep->temp_cold_max = (int16_t)lroundf(settings->hardware.ext_led_temp_cold_max * 100.0f);
     ep->temp_warm_min = (int16_t)lroundf(settings->hardware.ext_led_temp_warm_min * 100.0f);
@@ -123,9 +123,9 @@ static esp_err_t RGBLED_RegisterClusters(IZigbeeEndpoint *self, ezb_af_device_de
         EZB_ZCL_ATTR_ACCESS_READ_WRITE, EZB_ZCL_STD_MANUF_CODE, &ep->ext_led_mode) != EZB_ERR_NONE) {
         ezb_zcl_free_cluster_desc(on_off_cluster); ezb_af_free_endpoint_desc(endpoint); return ESP_FAIL;
     }
-    // 0x8014: LED animation index (used when mode == animation)
+    // 0x8014: LED startup animation index
     if (ezb_zcl_cluster_desc_add_manuf_attr(on_off_cluster, 0x8014, 0x20,
-        EZB_ZCL_ATTR_ACCESS_READ_WRITE, EZB_ZCL_STD_MANUF_CODE, &ep->ext_led_anim) != EZB_ERR_NONE) {
+        EZB_ZCL_ATTR_ACCESS_READ_WRITE, EZB_ZCL_STD_MANUF_CODE, &ep->ext_led_startup_anim) != EZB_ERR_NONE) {
         ezb_zcl_free_cluster_desc(on_off_cluster); ezb_af_free_endpoint_desc(endpoint); return ESP_FAIL;
     }
     if (ezb_zcl_cluster_desc_add_manuf_attr(on_off_cluster, 0x8020, 0x29, EZB_ZCL_ATTR_ACCESS_READ_WRITE, EZB_ZCL_STD_MANUF_CODE, &ep->temp_cold_min) != EZB_ERR_NONE) {
@@ -309,10 +309,8 @@ static bool RGBLED_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callb
             value = enabled ? EXT_LED_MODE_TEMPERATURE : EXT_LED_MODE_OFF;
             fields[0] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, ext_led_mode), &value, sizeof(value)};
             if (attr == EZB_ZCL_ATTR_ON_OFF_ON_OFF_ID) {
-                fields[1] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, rgb_red_state), &enabled, sizeof(enabled)};
-                fields[2] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, rgb_green_state), &enabled, sizeof(enabled)};
-                fields[3] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, rgb_blue_state), &enabled, sizeof(enabled)};
-                count = 4;
+                fields[1] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, ext_led_state), &enabled, sizeof(enabled)};
+                count = 2;
             }
         } else if (preset) {
             if (value >= RGB_COLOR_COUNT) return true;
@@ -331,8 +329,13 @@ static bool RGBLED_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callb
         } else {
             if (mode && value >= EXT_LED_MODE_COUNT) return true;
             size_t offset = mode ? offsetof(HardwareConfigs, ext_led_mode) : animation ?
-                            offsetof(HardwareConfigs, ext_led_anim) : offsetof(HardwareConfigs, ext_led_brightness);
+                            offsetof(HardwareConfigs, ext_led_startup_anim) : offsetof(HardwareConfigs, ext_led_brightness);
             fields[0] = (ConfigurationFieldUpdate){offset, &value, sizeof(value)};
+            if (mode) {
+                enabled = (value != EXT_LED_MODE_OFF);
+                fields[1] = (ConfigurationFieldUpdate){offsetof(HardwareConfigs, ext_led_state), &enabled, sizeof(enabled)};
+                count = 2;
+            }
         }
     }
     /* ConfigurationManager validates and commits before publishing the worker update. */

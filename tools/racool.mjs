@@ -531,7 +531,7 @@ const definition = {
             lookup: extBootAnimLookup,
             cluster: 'genOnOff',
             attribute: { ID: 0x8014, type: 0x20 },
-            description: 'Harici RGB LED açılış sırasında oynatılacak başlangıç animasyonu (Fabrika varsayılanı: Kapalı). Açılış tamamlandıktan sonra LED kesintisiz olarak MLX90614 sıcaklık görselleştirmesine geçer.',
+            description: 'Harici RGB LED açılış sırasında oynatılacak başlangıç animasyonu (Fabrika varsayılanı: Gökkuşağı). Açılış tamamlandıktan sonra LED kesintisiz olarak MLX90614 sıcaklık görselleştirmesine geçer.',
             endpointName: 'thermal_indicator',
             entityCategory: 'config',
             

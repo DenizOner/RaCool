@@ -193,7 +193,7 @@ test('source status labels are Turkish while numeric routes and properties remai
             {endpoint:{ID:1},data:{[attribute]:value}},null,{}, {device}),{[expose.property]:label}));
     }
     const boot=all.find(item=>item.name==='thermal_led_startup_animation');
-    assert.match(boot.description,/Fabrika varsayılanı: Kapalı/);
+    assert.match(boot.description,/Fabrika varsayılanı: Gökkuşağı/);
 });
 
 test('external and internal animation controls share every option and order while retaining old IDs', async () => {
@@ -503,8 +503,8 @@ test('unavailable startup telemetry clears stale values without replacing real z
 test('external startup description matches the firmware factory default', () => {
     const expose = all.find(item => item.name === 'thermal_led_startup_animation');
     assert.ok(expose);
-    assert.match(expose.description, /Fabrika varsayılanı: Kapalı/);
-    assert.doesNotMatch(expose.description, /Varsayılan: Gökkuşağı/);
+    assert.match(expose.description, /Fabrika varsayılanı: Gökkuşağı/);
+    assert.doesNotMatch(expose.description, /Varsayılan: Kapalı/);
 });
 
 test('CLI and OLED configuration reports have coordinator bindings on every setting route', async () => {

@@ -93,8 +93,8 @@ static void BootAnimation_TryStartRGB(void) {
   if (!config || !config->GetSnapshot || config->GetSnapshot(config, &snapshot) != ESP_OK)
     return; // Retry when persisted settings become available.
   const SystemSettings *settings = &snapshot;
-  RGBLEDAnimType animation = (RGBLEDAnimType)settings->hardware.ext_led_anim;
-  if (animation == RGBLED_ANIM_NONE || settings->hardware.ext_led_mode == EXT_LED_MODE_OFF) {
+  RGBLEDAnimType animation = (RGBLEDAnimType)settings->hardware.ext_led_startup_anim;
+  if (animation == RGBLED_ANIM_NONE || settings->hardware.ext_led_mode == EXT_LED_MODE_OFF || !settings->hardware.ext_led_state) {
     s_rgbBootResolved = true;
     return;
   }

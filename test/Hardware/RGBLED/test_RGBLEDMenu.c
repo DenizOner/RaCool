@@ -228,7 +228,7 @@ void test_LEDMenuColorFieldsCommitTogetherAndClampBrightness(void) {
 void test_LEDMenuBothCatalogsVisitSameOrderIncludingOff(void) {
     TEST_ASSERT_EQUAL(ESP_OK, RGBLEDMenuPlugin_Init());
     saved.hardware.builtin_led_idle_anim = 255;
-    saved.hardware.ext_led_anim = RGBLED_ANIM_NONE;
+    saved.hardware.ext_led_startup_anim = RGBLED_ANIM_NONE;
     size_t count;
     const LEDAnimationCatalogEntry *entries = LEDAnimationCatalog_Entries(&count);
     TEST_ASSERT_EQUAL(BUILTIN_LED_ANIM_COUNT + 1, count);
@@ -237,24 +237,24 @@ void test_LEDMenuBothCatalogsVisitSameOrderIncludingOff(void) {
         dispatch(UI_STATE_SET_LED_ANIM, 1);
         const LEDAnimationCatalogEntry *entry = &entries[index % count];
         TEST_ASSERT_EQUAL(entry->builtin_id, saved.hardware.builtin_led_idle_anim);
-        TEST_ASSERT_EQUAL(entry->external_id, saved.hardware.ext_led_anim);
+        TEST_ASSERT_EQUAL(entry->external_id, saved.hardware.ext_led_startup_anim);
         TEST_ASSERT_EQUAL_STRING(LEDAnimationCatalog_Label(entry->builtin_id, true),
                                  LEDAnimationCatalog_Label(entry->external_id, false));
     }
     dispatch(UI_STATE_SET_BUILTIN_IDLE, -1);
     dispatch(UI_STATE_SET_LED_ANIM, -1);
     TEST_ASSERT_EQUAL(entries[count - 1].builtin_id, saved.hardware.builtin_led_idle_anim);
-    TEST_ASSERT_EQUAL(entries[count - 1].external_id, saved.hardware.ext_led_anim);
+    TEST_ASSERT_EQUAL(entries[count - 1].external_id, saved.hardware.ext_led_startup_anim);
 }
 
 void test_LEDMenuUnknownStoredSelectionRecoversWithoutOfferingReservedTemperature(void) {
     TEST_ASSERT_EQUAL(ESP_OK, RGBLEDMenuPlugin_Init());
     saved.hardware.builtin_led_fault_anim = 254;
-    saved.hardware.ext_led_anim = RGBLED_ANIM_TEMPERATURE;
+    saved.hardware.ext_led_startup_anim = RGBLED_ANIM_TEMPERATURE;
     dispatch(UI_STATE_SET_BUILTIN_FAULT, 1);
     dispatch(UI_STATE_SET_LED_ANIM, 1);
     TEST_ASSERT_EQUAL(HEARTBEAT_RED, saved.hardware.builtin_led_fault_anim);
-    TEST_ASSERT_EQUAL(RGBLED_ANIM_HEARTBEAT_RED, saved.hardware.ext_led_anim);
+    TEST_ASSERT_EQUAL(RGBLED_ANIM_HEARTBEAT_RED, saved.hardware.ext_led_startup_anim);
     TEST_ASSERT_EQUAL_STRING("BILINMIYOR", LEDAnimationCatalog_Label(254, true));
 }
 
@@ -339,7 +339,7 @@ void test_LEDMenuAnimationPreviewsUseIndependentWorkersOnRotationAndSave(void) {
     }
     dispatch(UI_STATE_SET_LED_ANIM,1);
     TEST_ASSERT_EQUAL(1,external_animation_previews);
-    TEST_ASSERT_EQUAL(saved.hardware.ext_led_anim,preview_animation);
+    TEST_ASSERT_EQUAL(saved.hardware.ext_led_startup_anim,preview_animation);
     MenuPluginEvent save={.state=UI_STATE_SET_LED_ANIM,.action=MENU_PLUGIN_ACTION_BUTTON};
     TEST_ASSERT_TRUE(MenuPluginManager_DispatchEvent(&save));
     TEST_ASSERT_EQUAL(2,external_animation_previews);

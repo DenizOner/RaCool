@@ -433,9 +433,9 @@ static void apply_defaults_hardware(SystemSettings *s) {
     s->hardware.builtin_led_idle_anim       = DOUBLE_BLINK_WHITE;
     s->hardware.builtin_led_connecting_anim = HEARTBEAT_RED;
     s->hardware.builtin_led_fault_anim      = POLICE_STROBE;
-    s->hardware.rgb_red_state               = DEFAULT_RGB_RED_STATE;
-    s->hardware.rgb_green_state             = DEFAULT_RGB_GREEN_STATE;
-    s->hardware.rgb_blue_state              = DEFAULT_RGB_BLUE_STATE;
+    s->hardware.ext_led_state               = DEFAULT_EXT_LED_STATE;
+    s->hardware.ext_led_startup_anim        = DEFAULT_EXT_LED_STARTUP_ANIM;
+    s->hardware.oled_contrast               = DEFAULT_OLED_CONTRAST;
     s->hardware.ext_led_brightness          = DEFAULT_EXT_LED_BRIGHTNESS;
     s->hardware.ext_led_mode                = DEFAULT_EXT_LED_MODE;
     s->hardware.ext_led_anim                = DEFAULT_EXT_LED_ANIM;
@@ -871,6 +871,9 @@ _Static_assert(offsetof(SystemBaseConfigs, zigbee_tx_profile) == 14, "TX profile
 _Static_assert(offsetof(SystemBaseConfigs, menu_auto_exit_enabled) == 15, "Menu idle switch must occupy former padding");
 _Static_assert(offsetof(HardwareConfigs, version) == 72, "Hardware v7 version follows the appended encoder fields");
 _Static_assert(offsetof(HardwareConfigs, builtin_led_brightness) == 66, "Brightness must occupy former padding");
+_Static_assert(offsetof(HardwareConfigs, ext_led_state) == 6, "External LED state offset");
+_Static_assert(offsetof(HardwareConfigs, ext_led_startup_anim) == 7, "External LED startup anim offset");
+_Static_assert(offsetof(HardwareConfigs, oled_contrast) == 8, "OLED contrast offset");
 
 static void run_migrations(void) {
     HardwareConfigs *hw = &s_mgr.settings.hardware;
@@ -911,7 +914,16 @@ static void run_migrations(void) {
         hw->encoder_accel_threshold_ms = DEFAULT_ENCODER_ACCEL_THRESHOLD_MS;
         hw->encoder_invert_direction = DEFAULT_ENCODER_INVERT_DIRECTION;
     }
-    hw->builtin_led_startup_anim = DEFAULT_BUILTIN_LED_STARTUP_ANIM;
+    if (hw->version < 8) hw->builtin_led_startup_anim = DEFAULT_BUILTIN_LED_STARTUP_ANIM;
+    if (hw->version < 9) {
+        hw->ext_led_state = DEFAULT_EXT_LED_STATE;
+        if (LEDAnimationCatalog_IsValid(hw->ext_led_anim, false)) {
+            hw->ext_led_startup_anim = hw->ext_led_anim;
+        } else {
+            hw->ext_led_startup_anim = DEFAULT_EXT_LED_STARTUP_ANIM;
+        }
+        hw->oled_contrast = DEFAULT_OLED_CONTRAST;
+    }
     hw->version = HARDWARE_CONFIG_SCHEMA_VERSION;
 }
 
@@ -1026,6 +1038,10 @@ static esp_err_t config_load(IConfigurationManager *self, const char *block_name
                     *selections[index] = 255;
                     changed = true;
                 }
+            }
+            if (!LEDAnimationCatalog_IsValid(hardware->ext_led_startup_anim, false)) {
+                hardware->ext_led_startup_anim = DEFAULT_EXT_LED_STARTUP_ANIM;
+                changed = true;
             }
             if (!LEDAnimationCatalog_IsValid(hardware->ext_led_anim, false)) {
                 /* Legacy temperature ID is a color mode, not an animated frame source. */
@@ -1202,8 +1218,7 @@ static esp_err_t config_validate_candidate(SystemSettings s) {
     _Static_assert(sizeof(bool) == sizeof(uint8_t), "Persisted boolean schema requires one byte");
     const bool *flags[] = {&s.system.system_enabled, &s.control.fan_manual_mode,
         &s.control.fan_manual_state, &s.hardware.builtin_led_state,
-        &s.hardware.rgb_red_state, &s.hardware.rgb_green_state,
-        &s.hardware.rgb_blue_state, &s.restart_required};
+        &s.hardware.ext_led_state, &s.restart_required};
     for (size_t i = 0; i < sizeof(flags)/sizeof(flags[0]); ++i) {
         uint8_t representation;
         memcpy(&representation, flags[i], sizeof(representation));
@@ -1341,6 +1356,7 @@ static esp_err_t config_validate_candidate(SystemSettings s) {
         !LEDAnimationCatalog_IsValid(s.hardware.builtin_led_idle_anim, true) ||
         !LEDAnimationCatalog_IsValid(s.hardware.builtin_led_connecting_anim, true) ||
         !LEDAnimationCatalog_IsValid(s.hardware.builtin_led_fault_anim, true) ||
+        !LEDAnimationCatalog_IsValid(s.hardware.ext_led_startup_anim, false) ||
         !LEDAnimationCatalog_IsValid(s.hardware.ext_led_anim, false)) {
         ESP_LOGE(TAG, "Validate: unsupported LED animation selection");
         ok = false;
@@ -1411,9 +1427,9 @@ static const ConfigFieldDef k_fields[] = {
     CONFIG_FIELD(hardware, HardwareConfigs, builtin_led_idle_anim),
     CONFIG_FIELD(hardware, HardwareConfigs, builtin_led_connecting_anim),
     CONFIG_FIELD(hardware, HardwareConfigs, builtin_led_fault_anim),
-    CONFIG_FIELD(hardware, HardwareConfigs, rgb_red_state),
-    CONFIG_FIELD(hardware, HardwareConfigs, rgb_green_state),
-    CONFIG_FIELD(hardware, HardwareConfigs, rgb_blue_state),
+    CONFIG_FIELD(hardware, HardwareConfigs, ext_led_state),
+    CONFIG_FIELD(hardware, HardwareConfigs, ext_led_startup_anim),
+    CONFIG_FIELD(hardware, HardwareConfigs, oled_contrast),
     CONFIG_FIELD(hardware, HardwareConfigs, ext_led_brightness),
     CONFIG_FIELD(hardware, HardwareConfigs, ext_led_temp_cold_min),
     CONFIG_FIELD(hardware, HardwareConfigs, ext_led_temp_cold_max),

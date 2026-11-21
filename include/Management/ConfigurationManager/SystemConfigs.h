@@ -24,7 +24,7 @@
 
 /** Maximum number of fields in one synchronous block update. */
 #define CONFIG_UPDATE_MAX_FIELDS 16u
-#define HARDWARE_CONFIG_SCHEMA_VERSION 8u
+#define HARDWARE_CONFIG_SCHEMA_VERSION 9u
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -122,10 +122,10 @@ static inline bool SystemConfigs_IsValidDisplayMode(uint8_t mode) {
 
 /** @name Hardware / LED Defaults */
 /** @{ */
-#define DEFAULT_BUILTIN_LED_STATE      false  /**< Built-in LED off on boot. */
-#define DEFAULT_RGB_RED_STATE          false  /**< RGB red channel off on boot. */
-#define DEFAULT_RGB_GREEN_STATE        false  /**< RGB green channel off on boot. */
-#define DEFAULT_RGB_BLUE_STATE         false  /**< RGB blue channel off on boot. */
+#define DEFAULT_BUILTIN_LED_STATE      true   /**< Built-in LED on by default on boot. */
+#define DEFAULT_EXT_LED_STATE          true   /**< External RGB LED on by default on boot. */
+#define DEFAULT_EXT_LED_STARTUP_ANIM   RGBLED_ANIM_RAINBOW /**< Rainbow flow boot animation. */
+#define DEFAULT_OLED_CONTRAST          127u   /**< Default OLED contrast (0-255). */
 #define DEFAULT_BUILTIN_LED_BRIGHTNESS 255    /**< Built-in LED brightness (maximum). */
 #define DEFAULT_EXT_LED_BRIGHTNESS     255    /**< RGB LED brightness (maximum). */
 
@@ -473,9 +473,9 @@ typedef struct {
     uint8_t builtin_led_idle_anim;       /**< Animation ID when system is idle. */
     uint8_t builtin_led_connecting_anim; /**< Animation ID while Zigbee connects. */
     uint8_t builtin_led_fault_anim;      /**< Animation ID on system fault. */
-    bool    rgb_red_state;               /**< RGB red channel manual state. */
-    bool    rgb_green_state;             /**< RGB green channel manual state. */
-    bool    rgb_blue_state;              /**< RGB blue channel manual state. */
+    bool    ext_led_state;               /**< External RGB LED global on/off state. */
+    uint8_t ext_led_startup_anim;        /**< Independent boot animation for RGB LED. */
+    uint8_t oled_contrast;               /**< OLED display contrast (0–255). */
     uint8_t ext_led_brightness;          /**< RGB LED global brightness (0–255). */
     float   ext_led_temp_cold_min;       /**< Cold zone lower boundary (°C). */
     float   ext_led_temp_cold_max;       /**< Cold zone upper boundary (°C). */
