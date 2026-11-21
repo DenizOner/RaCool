@@ -30,6 +30,12 @@ typedef struct {
     /* Owned by the existing worker; lifecycle clears only after joining it. */
     DiagnosticsTestResult pendingResult;
     bool scanPending;
+    /* Owned by DiagnosticWorker; no health snapshot is published while Zigbee
+     * is the sole temporarily failing periodic service. */
+    /* Worker writes; the manual self-test API reads from another task. */
+    atomic_bool periodicZigbeePending;
+    TickType_t periodicZigbeeStarted;
+    TickType_t periodicZigbeeLastProbe;
     bool pendingHeapWarning;
     uint32_t pendingFreeHeap;
     int32_t pendingPreviousScore;
@@ -150,7 +156,7 @@ static bool CommitScan(void) {
     return true;
 }
 
-static bool RunScan(void) {
+static bool RunScan(bool periodic) {
     if (diagManager.scanPending) return CommitScan();
     if (atomic_load(&diagManager.closing) || !Lock()) return false;
     /* Names remain module-owned until the worker is joined. Registration only
@@ -169,9 +175,15 @@ static bool RunScan(void) {
     DiagnosticsTestResult result = {0};
     LOGI("SelfTestTask", "Asynchronous self-test started");
     PublishEvent(EVENT_DIAG_SELFTEST_STARTED, EVENT_TYPE_INFO, NULL, 0);
+    const char *periodicZigbee = NULL;
+    bool periodicZigbeeUnhealthy = false;
     for (uint32_t i = 0; i < config.criticalServiceCount && !atomic_load(&diagManager.closing); ++i) {
         const char *name = config.criticalServices[i];
         if (!name) continue;
+        if (periodic && strcmp(name, SVC_NAME_ZIGBEE) == 0) {
+            periodicZigbee = name;
+            continue; /* Probe once after all other services and custom checks. */
+        }
         PublishEvent(EVENT_DIAG_SELFTEST_STEP, EVENT_TYPE_INFO, (void *)name, (uint32_t)(strlen(name) + 1));
         IService *service = ServiceLocator_GetService(name);
         int64_t started = esp_timer_get_time();
@@ -209,6 +221,22 @@ static bool RunScan(void) {
         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < config.minFreeBlockThreshold;
     if (heapWarning) LOGW("SelfTestTask", "Free heap below threshold: %lu < %lu bytes",
         (unsigned long)freeHeap, (unsigned long)config.minFreeHeapThreshold);
+    if (periodicZigbee && !atomic_load(&diagManager.closing)) {
+        PublishEvent(EVENT_DIAG_SELFTEST_STEP, EVENT_TYPE_INFO, (void *)periodicZigbee,
+                     (uint32_t)(strlen(periodicZigbee) + 1));
+        IService *service = ServiceLocator_GetService(SVC_NAME_ZIGBEE);
+        int64_t started = esp_timer_get_time();
+        int32_t code = service && service->CheckHealth ?
+            service->CheckHealth(service) : ESP_ERR_INVALID_STATE;
+        int64_t elapsed = esp_timer_get_time() - started;
+        bool healthy = code == 0 && elapsed <= (int64_t)config.serviceCheckTimeoutMs * 1000;
+        periodicZigbeeUnhealthy = !healthy;
+        ++result.services_checked;
+        if (healthy) ++result.services_healthy;
+        else snprintf(result.last_failed_service, sizeof(result.last_failed_service),
+                      "%s", periodicZigbee);
+    }
+    if (atomic_load(&diagManager.closing)) return false;
     result.completed = true;
     result.last_test_time = (uint32_t)(esp_timer_get_time() / 1000000);
     result.health_score = CalculateHealthScore(result.services_healthy, result.services_checked);
@@ -216,6 +244,48 @@ static bool RunScan(void) {
     diagManager.pendingHeapWarning = heapWarning;
     diagManager.pendingFreeHeap = freeHeap;
     diagManager.scanPending = true;
+    /* The heap warning is independent of Zigbee's transient health.
+     * Publish genuine memory pressure now, without publishing a partial
+     * Zigbee score. Keep the original memory thresholds unchanged. */
+    if (periodicZigbee && periodicZigbeeUnhealthy && result.services_checked &&
+        result.services_healthy + 1 == result.services_checked) {
+        if (heapWarning) {
+            PublishEvent(EVENT_DIAG_HEAP_WARNING, EVENT_TYPE_WARNING, &freeHeap, sizeof(freeHeap));
+            diagManager.pendingHeapWarning = false; /* Already emitted; never duplicate at commit. */
+        }
+        atomic_store(&diagManager.periodicZigbeePending, true);
+        diagManager.periodicZigbeeStarted = xTaskGetTickCount();
+        diagManager.periodicZigbeeLastProbe = diagManager.periodicZigbeeStarted;
+        return false;
+    }
+    return CommitScan();
+}
+
+static bool CompletePeriodicZigbee(TickType_t now, bool manualRequested) {
+    if (!atomic_load(&diagManager.periodicZigbeePending) || !diagManager.scanPending) return false;
+    TickType_t elapsed = (TickType_t)(now - diagManager.periodicZigbeeStarted);
+    if (!manualRequested && elapsed < PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS) &&
+        (TickType_t)(now - diagManager.periodicZigbeeLastProbe) <
+        PositiveTicks(DIAGNOSTICS_ZIGBEE_PROBE_MS)) return false;
+    diagManager.periodicZigbeeLastProbe = now;
+    IService *service = ServiceLocator_GetService(SVC_NAME_ZIGBEE);
+    int64_t started = esp_timer_get_time();
+    int32_t code = service && service->CheckHealth ?
+        service->CheckHealth(service) : ESP_ERR_INVALID_STATE;
+    int64_t duration = esp_timer_get_time() - started;
+    if (code == 0 && duration <= (int64_t)diagManager.config.serviceCheckTimeoutMs * 1000) {
+        ++diagManager.pendingResult.services_healthy;
+        diagManager.pendingResult.last_failed_service[0] = 0;
+    } else if (!manualRequested && elapsed < PositiveTicks(DIAGNOSTICS_ZIGBEE_RECOVERY_GRACE_MS)) {
+        return false;
+    } else {
+        LOGE("SelfTestTask", "Persistent Zigbee health failure after %lu ms",
+             (unsigned long)(elapsed * portTICK_PERIOD_MS));
+    }
+    diagManager.pendingResult.health_score = CalculateHealthScore(
+        diagManager.pendingResult.services_healthy, diagManager.pendingResult.services_checked);
+    diagManager.pendingResult.last_test_time = (uint32_t)(esp_timer_get_time() / 1000000);
+    atomic_store(&diagManager.periodicZigbeePending, false);
     return CommitScan();
 }
 
@@ -235,11 +305,25 @@ static void DiagnosticWorker(void *unused) {
             vTaskDelay(PositiveTicks(DIAGNOSTICS_WORKER_POLL_MS));
             continue;
         }
-        bool run = false, initial = false;
+        if (atomic_load(&diagManager.periodicZigbeePending)) {
+            bool manualRequested = false;
+            if (Lock()) {
+                manualRequested = diagManager.requested;
+                xSemaphoreGive(diagManager.mutex);
+            }
+            if (CompletePeriodicZigbee(now, manualRequested)) lastScan = xTaskGetTickCount();
+            /* The manual request remains queued and runs in the next poll.
+             * This never blocks its admission for the full grace duration. */
+            vTaskDelay(PositiveTicks(DIAGNOSTICS_WORKER_POLL_MS));
+            continue;
+        }
+        bool run = false, initial = false, explicitRequest = false, periodicDue = false;
         if (Lock()) {
             initial = diagManager.initialPending;
-            run = diagManager.requested || (!initial && diagManager.periodicRunning &&
-                (TickType_t)(now - lastScan) >= PositiveTicks(diagManager.config.periodicIntervalMs));
+            explicitRequest = diagManager.requested;
+            periodicDue = !initial && diagManager.periodicRunning &&
+                (TickType_t)(now - lastScan) >= PositiveTicks(diagManager.config.periodicIntervalMs);
+            run = explicitRequest || periodicDue;
             xSemaphoreGive(diagManager.mutex);
         }
         if (initial && !run) {
@@ -252,7 +336,7 @@ static void DiagnosticWorker(void *unused) {
             }
             run = ready || (TickType_t)(now - started) >= PositiveTicks(DIAGNOSTICS_STARTUP_READY_TIMEOUT_MS);
         }
-        if ((run || diagManager.scanPending) && RunScan())
+        if ((run || diagManager.scanPending) && RunScan(periodicDue && !explicitRequest && !initial))
             lastScan = xTaskGetTickCount();
         vTaskDelay(PositiveTicks(DIAGNOSTICS_WORKER_POLL_MS));
     }
@@ -326,6 +410,7 @@ static int32_t Diag_Stop(IService *self) {
     diagManager.requested = false;
     diagManager.lastResult.is_running = false;
     diagManager.scanPending = false;
+    atomic_store(&diagManager.periodicZigbeePending, false);
     diagManager.customCheckCount = 0;
     memset(diagManager.customChecks, 0, sizeof(diagManager.customChecks));
     diagManager.state = SERVICE_STATE_STOPPED;
@@ -354,7 +439,7 @@ static int32_t Diag_StartAsyncSelfTest(IDiagnosticsManager *self) {
     if (!self || !Lock()) return DIAG_ERR_BUSY;
     int32_t result = DIAG_ERR_INVALID_STATE;
     if (diagManager.state == SERVICE_STATE_STARTED && !atomic_load(&diagManager.closing)) {
-        if (diagManager.requested || diagManager.lastResult.is_running) result = DIAG_ERR_BUSY;
+        if (diagManager.requested || (diagManager.lastResult.is_running && !atomic_load(&diagManager.periodicZigbeePending))) result = DIAG_ERR_BUSY;
         else { diagManager.requested = true; result = DIAG_OK; }
     }
     xSemaphoreGive(diagManager.mutex);
@@ -499,6 +584,7 @@ static int32_t Diag_InitializeWithConfig(IDiagnosticsManager *self,
     diagManager.periodicRunning = config.enablePeriodicTest;
     memset(&diagManager.lastResult, 0, sizeof(DiagnosticsTestResult));
     diagManager.scanPending = false;
+    atomic_store(&diagManager.periodicZigbeePending, false);
     atomic_store(&diagManager.closing, false);
     atomic_store(&diagManager.emergency, false);
     if (diagManager.mutex) {
