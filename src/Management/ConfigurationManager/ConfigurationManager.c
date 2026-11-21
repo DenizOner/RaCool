@@ -917,7 +917,7 @@ static void run_migrations(void) {
     if (hw->version < 8) hw->builtin_led_startup_anim = DEFAULT_BUILTIN_LED_STARTUP_ANIM;
     if (hw->version < 9) {
         hw->ext_led_state = DEFAULT_EXT_LED_STATE;
-        if (LEDAnimationCatalog_IsValid(hw->ext_led_anim, false) && hw->ext_led_anim != RGBLED_ANIM_NONE) {
+        if (LEDAnimationCatalog_IsValid(hw->ext_led_anim, false)) {
             hw->ext_led_startup_anim = hw->ext_led_anim;
         } else {
             hw->ext_led_startup_anim = DEFAULT_EXT_LED_STARTUP_ANIM;
