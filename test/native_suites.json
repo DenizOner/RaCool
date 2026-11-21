@@ -1,5 +1,25 @@
 [
   {
+    "name": "OtaImageWriterUnsigned",
+    "file": "test/Communication/Zigbee/Endpoints/test_OtaImageWriterUnsigned.c"
+  },
+  {
+    "name": "OtaImageStream",
+    "file": "test/Communication/Zigbee/Endpoints/test_OtaImageStream.c"
+  },
+  {
+    "name": "OtaImageWriter",
+    "file": "test/Communication/Zigbee/Endpoints/test_OtaImageWriter.c"
+  },
+  {
+    "name": "OtaImagePolicy",
+    "file": "test/Communication/Zigbee/Endpoints/test_OtaImagePolicy.c"
+  },
+  {
+    "name": "OtaBootRecovery",
+    "file": "test/Core/SystemInitializer/test_OtaBootRecovery.c"
+  },
+  {
     "name": "SystemInitializerStartup",
     "file": "test/Core/SystemInitializer/test_SystemInitializerStartup.c",
     "generateRunner": true
@@ -242,7 +262,10 @@
   {
     "name": "DeveloperMode",
     "file": "test/Communication/DebugConsole/Core/test_DeveloperMode.c",
-    "sources": ["src/Communication/DebugConsole/Core/DeveloperMode.c", "test/Infrastructure/support/esp_console_split_argv.c"],
+    "sources": [
+      "src/Communication/DebugConsole/Core/DeveloperMode.c",
+      "test/Infrastructure/support/esp_console_split_argv.c"
+    ],
     "generateRunner": true
   },
   {
@@ -412,6 +435,7 @@
     "name": "EndpointOTA",
     "file": "test/Communication/Zigbee/Endpoints/test_EndpointOTA.c",
     "sources": [
+      "src/Communication/Zigbee/Endpoints/OtaImagePolicy.c",
       "test/Communication/Zigbee/test_zigbee_fakes.c",
       "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
       "src/Hardware/RGBLED/RGBLEDColorEngine.c",
@@ -743,6 +767,7 @@
     "name": "EndpointRegistration",
     "file": "test/Communication/Zigbee/Endpoints/test_EndpointRegistration.c",
     "sources": [
+      "src/Communication/Zigbee/Endpoints/OtaImagePolicy.c",
       "test/Communication/Zigbee/test_zigbee_fakes.c",
       "src/Communication/Zigbee/Endpoints/EndpointCommon.c",
       "src/Hardware/RGBLED/RGBLEDColorEngine.c",

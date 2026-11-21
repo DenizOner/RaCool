@@ -4,7 +4,11 @@
 #include "Communication/Zigbee/IZigbeeEndpoint.h"
 
 /**
- * @brief OTA state machine durumları
+ * @brief Observable OTA progress states.
+ *
+ * The current endpoint does not have a verified image writer: progress
+ * callbacks reject transfer/verification/application until the complete
+ * flash, integrity and rollback owner is implemented.
  */
 typedef enum {
     OTA_STATE_IDLE = 0,
@@ -16,10 +20,10 @@ typedef enum {
 } OtaUpgradeState;
 
 /**
- * @brief OTA Upgrade Client (EP10) nesnesini oluşturur.
+ * @brief Register the existing EP10 Zigbee OTA client descriptor.
  *
- * Zigbee OTA Upgrade Cluster client rolünde çalışır.
- * State machine ile download/verify/apply lifecycle'ı yönetir.
+ * This registers discovery attributes, not a working firmware installer.
+ * Until an image writer is implemented, transfer callbacks return ABORT.
  */
 IZigbeeEndpoint *EndpointOTA_Create(void);
 
