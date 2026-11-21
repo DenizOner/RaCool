@@ -110,8 +110,16 @@
 // --- OTA configuration ---
 #define ZIGBEE_OTA_UPGRADE_HARDWARE_VERSION 1
 #define ZIGBEE_OTA_UPGRADE_QUERY_INTERVAL 3600 // 1 hour
-#define ZIGBEE_OTA_MANUFACTURER_CODE 0x1234
-#define ZIGBEE_OTA_IMAGE_TYPE 0x1234
+/* Local DIY/test OTA namespace (shared TEST_VENDOR_1), not a CSA
+ * manufacturer allocation. Never publish this identity to a global OTA
+ * catalog. Require an exact local image type, model/hardware/version
+ * policy and signed ESP app verification before any future installation.
+ * 0xFFFF is a wildcard; old 0x1234 was not RaCool's manufacturer code.
+ * Switching existing devices requires an authorized signed-base migration;
+ * changing this constant does not migrate already installed firmware. */
+#define ZIGBEE_OTA_MANUFACTURER_CODE 0xFFF1u
+/* Stable RaCool-local image family within the shared DIY test namespace. */
+#define ZIGBEE_OTA_IMAGE_TYPE 0x1234u
 
 // --- Firmware version ---
 #include "ProductVersion.generated.h"

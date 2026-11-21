@@ -1,10 +1,10 @@
 ﻿#if !defined(RACOOL_TARGET_TESTING) || defined(RACOOL_INTERNAL_TEST_ACCESS)
 #include "Communication/Zigbee/Endpoints/EndpointOTA.h"
 #include "Communication/Zigbee/Endpoints/EndpointCommon.h"
+#include "Communication/Zigbee/Endpoints/OtaImagePolicy.h"
 #include "Communication/Zigbee/ZigbeeConfig.h"
 #include "Core/EventBus/IEventBus.h"
 #include "Core/ServiceLocator/ServiceLocator.h"
-#include "Core/LogManager/ILogManager.h"
 #include "esp_zigbee.h"
 #include "Management/ConfigurationManager/IConfigurationManager.h"
 #include "Management/PowerManager/IPowerManager.h"
@@ -23,12 +23,20 @@ typedef struct {
 static EndpointOTA otaInstance;
 static const char *TAG_OTA = "EndpointOTA";
 
-static void PublishOtaEvent(const char *name, EventType type) {
+static void PublishOtaError(void) {
     IEventBus *bus = ServiceLocator_GetEventBus();
-    if (bus) {
-        BusEvent event = {.eventName = name, .type = type};
-        bus->Publish(event);
-    }
+    if (bus && bus->Publish)
+        bus->Publish((BusEvent){.eventName = "ota_error", .type = EVENT_TYPE_ERROR});
+}
+
+static void RejectUnimplementedOta(EndpointOTA *ota, bool newAttempt) {
+    /* Preserve the existing error event, but publish it only once per failed
+     * transfer. Never publish ota_complete without verified flash/boot state. */
+    bool firstFailure = newAttempt || ota->state != OTA_STATE_ERROR;
+    ota->state = OTA_STATE_ERROR;
+    ota->bytesReceived = 0;
+    ota->totalSize = 0;
+    if (firstFailure) PublishOtaError();
 }
 
 static const char *OTA_GetName(IZigbeeEndpoint *self) { return "OTAUpgradeEndpoint"; }
@@ -141,59 +149,59 @@ static bool OTA_HandleAction(IZigbeeEndpoint *self, ezb_zcl_core_action_callback
     ezb_zcl_ota_upgrade_client_progress_message_t *msg =
         (ezb_zcl_ota_upgrade_client_progress_message_t *)message;
 
+    /*
+     * This endpoint does not yet own a validated OTA parser, inactive flash
+     * partition, esp_ota handle or boot/rollback contract. The SDK forwards
+     * this callback result to the sender: reporting SUCCESS before any actual
+     * flash operation could falsely advertise an installed image.
+     * Reject every transfer stage until the complete OTA owner is implemented.
+     */
+    if (msg->in.progress == EZB_ZCL_OTA_UPGRADE_PROGRESS_START) {
+        const OtaImagePolicy policy = {
+            .manufacturer = ZIGBEE_OTA_MANUFACTURER_CODE,
+            .image_type = ZIGBEE_OTA_IMAGE_TYPE,
+            .hardware_version = ZIGBEE_OTA_UPGRADE_HARDWARE_VERSION,
+            .current_version = ZIGBEE_FIRMWARE_VERSION,
+            .slot_size = 0x300000u
+        };
+        const OtaImageOffer offer = {
+            .manufacturer = msg->in.start.manuf_code,
+            .image_type = msg->in.start.image_type,
+            .version = msg->in.start.file_version,
+            .file_size = msg->in.start.image_size
+        };
+        if (!OtaImagePolicy_AcceptOffer(&policy, &offer)) {
+            RejectUnimplementedOta(ota, true);
+            *ret_status = ESP_ERR_INVALID_ARG;
+            msg->out.result = EZB_ZCL_STATUS_ABORT;
+            return true;
+        }
+        ESP_LOGW(TAG_OTA, "Valid OTA offer rejected: signed writer not yet active");
+    }
+
     switch (msg->in.progress) {
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_START:
-        ota->state = OTA_STATE_DOWNLOADING;
-        ota->bytesReceived = 0;
-        ota->totalSize = msg->in.start.image_size;
-        ESP_LOGI(TAG_OTA, "OTA download started, size=%lu", (unsigned long)ota->totalSize);
-        PublishOtaEvent("ota_download_start", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_RECEIVING:
-        ota->bytesReceived = msg->in.receiving.file_offset + msg->in.receiving.block_size;
-        if (ota->totalSize > 0) {
-            uint8_t pct = (uint8_t)((ota->bytesReceived * 100) / ota->totalSize);
-            if (pct % 10 == 0) {
-                ESP_LOGI(TAG_OTA, "OTA progress: %u%% (%lu/%lu)",
-                         pct, (unsigned long)ota->bytesReceived, (unsigned long)ota->totalSize);
-            }
-        }
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_CHECK:
-        ota->state = OTA_STATE_VERIFYING;
-        ESP_LOGI(TAG_OTA, "OTA download complete, verifying...");
-        PublishOtaEvent("ota_verify_start", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_APPLY:
-        ota->state = OTA_STATE_APPLYING;
-        ESP_LOGI(TAG_OTA, "OTA verification passed, applying...");
-        PublishOtaEvent("ota_apply_start", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
-        return true;
-
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_FINISH:
-        ota->state = OTA_STATE_IDLE;
-        ESP_LOGI(TAG_OTA, "OTA upgrade complete! Countdown: %lu s", (unsigned long)msg->in.finish.count_down_delay);
-        PublishOtaEvent("ota_complete", EVENT_TYPE_INFO);
-        msg->out.result = EZB_ZCL_STATUS_SUCCESS;
+        RejectUnimplementedOta(ota, msg->in.progress == EZB_ZCL_OTA_UPGRADE_PROGRESS_START);
+        *ret_status = ESP_ERR_NOT_SUPPORTED;
+        msg->out.result = EZB_ZCL_STATUS_ABORT;
         return true;
 
     case EZB_ZCL_OTA_UPGRADE_PROGRESS_ABORT:
-        ota->state = OTA_STATE_ERROR;
-        ESP_LOGE(TAG_OTA, "OTA upgrade aborted");
-        PublishOtaEvent("ota_error", EVENT_TYPE_ERROR);
+        /* Acknowledge cancellation only, never successful installation. */
+        RejectUnimplementedOta(ota, false);
+        *ret_status = ESP_OK;
         msg->out.result = EZB_ZCL_STATUS_SUCCESS;
         return true;
 
     default:
-        ESP_LOGW(TAG_OTA, "Unhandled OTA status: 0x%x", msg->in.progress);
-        return false;
+        RejectUnimplementedOta(ota, false);
+        *ret_status = ESP_ERR_INVALID_ARG;
+        msg->out.result = EZB_ZCL_STATUS_ABORT;
+        return true;
     }
 }
 
