@@ -338,5 +338,9 @@
   {
     "file": "test/Communication/Zigbee/test_local_ota_index.py",
     "runner": "python"
+  },
+  {
+    "file": "test/Infrastructure/test_agent_customization.mjs",
+    "runner": "node"
   }
 ]
