@@ -2,6 +2,34 @@
 
 This file describes the current implementation, not execution history or task status. Engineering rules live in [AGENTS.md](AGENTS.md), task tracking lives in GitHub Issues, and automated verification runs via GitHub Actions CI. Update existing sections when interfaces or behavior change; do not append completion reports. Historical document snapshots in docs/archive are non-authoritative.
 
+## Agent and IDE customization
+
+The repository-root [AGENTS.md](AGENTS.md) is the single durable engineering
+instruction source; the approved merge gate also lives there and in Issue #20.
+The tracked `.agent/` directory is an **optional legacy Antigravity Kit catalog**
+of agents, skills, workflows, and helper scripts. Its
+[`.agent/rules/GEMINI.md`](.agent/rules/GEMINI.md) is a minimal compatibility
+entry point, not an additional permission or test authority. Generic Kit scripts
+are not substitutes for RaCool's test runners and do not establish acceptance
+when their checks are skipped.
+
+Antigravity documents workspace `AGENTS.md` and the legacy `.agent/rules/*.md`
+location as supported discovery candidates, as well as the current
+`.agents/rules/` and `.agents/skills/` locations. VS Code's Copilot harness
+supports project instructions in `AGENTS.md`, custom agents in
+`.github/agents/`, and skills in `.github/skills/`; Codex supports
+`.agents/skills/`. The committed `.vscode/settings.json` configures only
+CMake/PlatformIO and does not register additional Agent search paths.
+No portable Skill, new custom Agent, hook, or MCP setup is automatically
+installed by this compatibility rule. Real discovery, activation, permissions,
+and representative development/review behavior must be verified in each
+selected local harness, not inferred solely from source files.
+
+The focused source-contract helper is
+`test/Infrastructure/test_agent_customization.mjs`, registered through
+`test/helper_suites.json`. It verifies guidance consistency and preserved
+legacy entry points; it cannot prove IDE or Antigravity runtime discovery.
+
 ## Platform and build ownership
 
 RaCool uses an ESP32-C6 revision 0.1, 8 MB flash, ESP-IDF/FreeRTOS, LVGL 9.6.0, a 128x64 SSD1306 OLED, KY-040 encoder, MLX90614 object/ambient sensor, chip temperature sensor, fan relay and two RGB indicators. It is a mains-powered Zigbee router; battery/PMIC/electrical power-cut hardware is not established.
