@@ -15,7 +15,7 @@ test('normal development keeps the existing authority and native test contract',
     assert.match(legacy, /repository-root \[AGENTS\.md\]/);
     assert.match(legacy, /primary authorized[\s\S]+executor handles reachable source/);
     assert.match(legacy, /baseline tests/);
-    assert.match(legacy, /conditional PR merge follows/);
+    assert.match(legacy, /conditional PR merge follows/i);
     assert.match(rules, /single writer/i);
     assert.doesNotMatch(legacy, /P0 \(GEMINI\.md\)|highest priority rule|GLOBAL SOCRATIC GATE/);
     assert.doesNotMatch(legacy, /ASK minimum 3|skipping the announcement.*VIOLATION/i);
