@@ -69,6 +69,55 @@ PERFORMANCE_CHECKS = [
     ("Playwright E2E", ".agent/skills/webapp-testing/scripts/playwright_runner.py", False),
 ]
 
+# RaCool canonical verification gates
+RACOOL_CHECKS = [
+    ("Test Layout", ["node", "test/check_test_layout.mjs"], True),
+    ("Test Inventory", ["node", "test/check_test_inventory.mjs"], True),
+    ("Host Native Suites", ["node", "test/run_native_tests.mjs"], True),
+    ("Helper Suites", ["node", "test/run_helper_tests.mjs"], True),
+]
+
+def is_racool_project(project_path: Path) -> bool:
+    """Detect if running within RaCool embedded repository"""
+    return (project_path / "platformio.ini").exists() and (project_path / "test" / "check_test_layout.mjs").exists()
+
+def run_racool_command(name: str, cmd: List[str], project_path: Path) -> dict:
+    """Run a RaCool canonical verification command"""
+    print_step(f"Running: {name} ({' '.join(cmd)})")
+    env = dict(subprocess.os.environ)
+    if "RACOOL_PYTHON" not in env:
+        local_venv_py = project_path / (".venv/Scripts/python.exe" if sys.platform == "win32" else ".venv/bin/python")
+        if not local_venv_py.exists():
+            env["RACOOL_PYTHON"] = sys.executable
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(project_path),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=env
+        )
+        passed = result.returncode == 0
+        if passed:
+            print_success(f"{name}: PASSED")
+        else:
+            print_error(f"{name}: FAILED")
+            if result.stderr:
+                print(f"  Error: {result.stderr[:300]}")
+            elif result.stdout:
+                print(f"  Output: {result.stdout[:300]}")
+        return {
+            "name": name,
+            "passed": passed,
+            "output": result.stdout,
+            "error": result.stderr,
+            "skipped": False
+        }
+    except Exception as e:
+        print_error(f"{name}: ERROR - {str(e)}")
+        return {"name": name, "passed": False, "output": "", "error": str(e), "skipped": False}
+
 def check_script_exists(script_path: Path) -> bool:
     """Check if script file exists"""
     return script_path.exists() and script_path.is_file()
@@ -166,12 +215,14 @@ def main():
         epilog="""
 Examples:
   python scripts/checklist.py .                      # Core checks only
+  python scripts/checklist.py . --firmware           # Include firmware compilation
   python scripts/checklist.py . --url http://localhost:3000  # Include performance
         """
     )
     parser.add_argument("project", help="Project path to validate")
     parser.add_argument("--url", help="URL for performance checks (lighthouse, playwright)")
     parser.add_argument("--skip-performance", action="store_true", help="Skip performance checks even if URL provided")
+    parser.add_argument("--firmware", action="store_true", help="Include PlatformIO production firmware build (RaCool)")
     
     args = parser.parse_args()
     
@@ -186,6 +237,29 @@ Examples:
     print(f"URL: {args.url if args.url else 'Not provided (performance checks skipped)'}")
     
     results = []
+
+    # If RaCool embedded repository, execute canonical verification gates
+    if is_racool_project(project_path):
+        print_header("🛡️ RACOOL CANONICAL VERIFICATION GATES")
+        for name, cmd, required in RACOOL_CHECKS:
+            result = run_racool_command(name, cmd, project_path)
+            results.append(result)
+            if required and not result["passed"]:
+                print_error(f"CRITICAL: {name} failed. Stopping checklist.")
+                print_summary(results)
+                sys.exit(1)
+
+        if args.firmware:
+            print_header("⚡ FIRMWARE BUILD CHECK")
+            result = run_racool_command("Production Firmware Build", ["pio", "run", "-e", "esp32-c6-devkitc-1"], project_path)
+            results.append(result)
+            if not result["passed"]:
+                print_error("CRITICAL: Firmware build failed.")
+                print_summary(results)
+                sys.exit(1)
+
+        all_passed = print_summary(results)
+        sys.exit(0 if all_passed else 1)
     
     # Run core checks
     print_header("📋 CORE CHECKS")
