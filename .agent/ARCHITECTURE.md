@@ -1,6 +1,21 @@
 # Antigravity Kit Architecture
 
-> Comprehensive AI Agent Capability Expansion Toolkit
+> Comprehensive AI Agent Capability Expansion Toolkit for RaCool Workspace
+
+---
+
+## 🏛️ RaCool Project Integration & Authority
+
+> **CRITICAL DIRECTIVE:** In the RaCool repository, **`AGENTS.md` is the durable, authoritative engineering directive**, and **`CODEBASE.md` is the active architectural specification**.
+>
+> **Hierarchy of Rules:**
+> 1. **`AGENTS.md` (P0)**: Authoritative directives, Git single-writer rules, memory/concurrency policies, security, verification gates, and Product Owner standing decisions (Issue #20).
+> 2. **`CODEBASE.md`**: Module boundaries, component contracts, FreeRTOS task ownership, and hardware specifications.
+> 3. **`.agent/rules/GEMINI.md` (P1)**: Workspace AI operational rules, bridging Antigravity / Gemini features with RaCool directives.
+> 4. **`.agent/agents/` (P2) & `.agent/skills/` (P3)**: Optional AI personas and specialized skills.
+>
+> In any case of conflict between `.agent/` toolkits and `AGENTS.md`, **`AGENTS.md` strictly governs**.
+> RaCool is an embedded FreeRTOS/ESP-IDF C/C++ project for ESP32-C6. Generic web/mobile patterns within `.agent/` (such as SEO, Lighthouse, Next.js, Flutter) are non-canonical reference materials and do not apply to RaCool embedded firmware.
 
 ---
 
